@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./abi": "./runtime/abi.mjs",
     "./encoding": "./runtime/encoding.mjs",
     "./primitives": "./runtime/primitives.mjs",
     "./verify": "./runtime/verify.mjs",

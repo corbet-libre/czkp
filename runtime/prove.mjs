@@ -2,8 +2,8 @@
 // The embedding validates policy inputs and keeps the resulting openings itself.
 import { openBackend } from './backend.mjs';
 import { OPTIONS } from './encoding.mjs';
-export async function createProver({artifacts, browserFactory}) {
-  const api=await openBackend(artifacts,browserFactory);
+export async function createProver({artifacts, browserFactory, backendType}) {
+  const api=await openBackend(artifacts,browserFactory,backendType);
   try {
     const { Noir }=await import('@noir-lang/noir_js');
     const { UltraHonkBackend, UltraHonkVerifierBackend }=await import('@aztec/bb.js');
@@ -13,12 +13,15 @@ export async function createProver({artifacts, browserFactory}) {
       async prove(witnessInputs,expectedPublicInputs) {
         if(busy||destroyed) throw new Error('Prover busy or closed');busy=true;
         try {
+          const start=performance.now();
           const executed=await noir.execute(witnessInputs);
+          const prepared=performance.now();
           const proof=await backend.generateProof(executed.witness,OPTIONS);
+          const proven=performance.now();
           if(proof.proof.length>artifacts.limits.maxProofBytes||proof.publicInputs.length!==expectedPublicInputs.length
             ||!proof.publicInputs.every((v,i)=>BigInt(v)===BigInt(expectedPublicInputs[i]))) throw new Error('Public input mismatch');
           if(!await verifier.verifyProof({...proof,verificationKey:artifacts.verificationKey},OPTIONS)) throw new Error('Invalid generated proof');
-          return proof;
+          return {...proof,timings:{witnessMs:prepared-start,proveMs:proven-prepared,verifyMs:performance.now()-proven}};
         } finally {busy=false;}
       },
       async destroy(){if(busy)throw new Error('Prover busy');if(!destroyed){destroyed=true;await api.destroy();}}

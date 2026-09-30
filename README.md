@@ -13,3 +13,9 @@ Barretenberg and Noir peer dependencies. The verifier accepts public statements
 and an application-supplied public-input encoder; the prover is holder-only and
 consumes witnesses transiently. The embedding authenticates artifact snapshots.
 No application account policy or persistent state lives in these adapters.
+
+The `abi` entry encodes witnesses and public inputs from an authenticated Noir
+ABI, including nested structures. It rejects noncanonical fields, overflows,
+unsafe integers and extra struct members. Witness objects stay private.
+The prover can explicitly select upstream `Wasm` or `NativeUnixSocket`; explicit
+selection never silently falls back. Browser callers always use Wasm workers.

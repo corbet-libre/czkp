@@ -4,7 +4,7 @@ import { OPTIONS, unhex } from './encoding.mjs';
 const exact = (value, keys) => value && !Array.isArray(value) && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value,key));
 const equal = (a,b) => a.length===b.length && a.every((v,i)=>v===b[i]);
 export async function createVerifier({ artifacts, publicInputs, browserFactory }) {
-  const api = await openBackend(artifacts, browserFactory);
+  const api = await openBackend(artifacts, browserFactory, undefined, true);
   try {
     const { UltraHonkVerifierBackend } = await import('@aztec/bb.js');
     const verifier = new UltraHonkVerifierBackend(api);
