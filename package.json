@@ -1,0 +1,17 @@
+{
+  "name": "@corbet-labs/czkp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./encoding": "./runtime/encoding.mjs",
+    "./primitives": "./runtime/primitives.mjs",
+    "./verify": "./runtime/verify.mjs",
+    "./prove": "./runtime/prove.mjs"
+  },
+  "license": "LGPL-3.0-only WITH LGPL-3.0-linking-exception",
+  "peerDependencies": {
+    "@aztec/bb.js": "5.0.0",
+    "@noir-lang/noir_js": "1.0.0-beta.26"
+  }
+}

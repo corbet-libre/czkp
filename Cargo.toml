@@ -16,3 +16,9 @@ crate-type = ["rlib"]
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
+
+[dependencies]
+data-encoding = "2.9"
+ed25519-dalek = "2.2"
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"

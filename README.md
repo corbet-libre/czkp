@@ -1,25 +1,15 @@
 # czkp
 
-**Shared zero-knowledge core.**
+Canonical BN254 field and base64url encodings, SHA-256 through RustCrypto, and strict Ed25519 verification through dalek. No proof system, secrets, state or policy is implemented here. `ProofScope` identifies a pinned circuit and verification key. Existing protocol domains remain unchanged.
 
-`czkp` will hold the zero-knowledge plumbing shared by both sides (the member's wallet proves, the server verifies): encoding, hashes, and prove/verify, each separately selectable. It wraps an established upstream proof system.
+Survey (2026-09-30): [RustCrypto sha2](https://crates.io/crates/sha2) and [ed25519-dalek](https://github.com/dalek-cryptography/curve25519-dalek) match the existing wire format and remain dependencies. [Noir](https://github.com/noir-lang/noir) and [Barretenberg](https://github.com/AztecProtocol/aztec-packages/tree/next/barretenberg) remain the proof system; the process verifier is in cvfy and policy circuits in cblc. Bulletproofs was considered but would replace the existing relation and protocol without migration evidence.
 
-Status: name reserved, no implementation yet.
+GitHub Actions runs stable Rust formatting, clippy with warnings denied, and tests. No workstation builds. See [CONTRACT](docs/CONTRACT.md).
 
-## Boundaries
+Copyright 2026 Julian Y. Richard Corbet. LGPL-3.0-only WITH LGPL-3.0-linking-exception; see [LICENSE.md](LICENSE.md).
 
-What it does:
-
-- Provides encoding, hashing and prove/verify plumbing to `cssr`, `cvfy` and `cwlt`.
-
-What it never does:
-
-- Holds no secrets and no state.
-- No own proof system: the upstream system (for example Noir/Barretenberg) stays a dependency.
-
-## License
-
-Copyright 2026 Julian Y. Richard Corbet. Licensed under
-[LGPL-3.0-only](LICENSES/LGPL-3.0-only.txt)
-[WITH LGPL-3.0-linking-exception](LICENSES/LGPL-3.0-linking-exception.txt).
-See [LICENSE.md](LICENSE.md).
+The JavaScript package separately exports `/verify` and `/prove` over pinned
+Barretenberg and Noir peer dependencies. The verifier accepts public statements
+and an application-supplied public-input encoder; the prover is holder-only and
+consumes witnesses transiently. The embedding authenticates artifact snapshots.
+No application account policy or persistent state lives in these adapters.
