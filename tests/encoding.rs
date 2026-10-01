@@ -58,3 +58,26 @@ fn scopes_hashes_and_diagnostics() {
     assert_eq!(Error::InvalidInput.to_string(), "InvalidInput");
     assert!(std::error::Error::source(&Error::Signature).is_none());
 }
+
+#[cfg(feature = "schema")]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn proof_scope_schema_follows_the_wire_owner() {
+    use utoipa::{PartialSchema, ToSchema};
+    let schema = serde_json::to_value(czkp::ProofScope::schema()).unwrap();
+    assert_eq!(schema["type"], "object");
+    assert_eq!(schema["additionalProperties"], false);
+    for name in ["circuitDigest", "verifyingKeyDigest"] {
+        assert!(
+            schema["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v == name)
+        );
+        assert_eq!(schema["properties"][name]["type"], "array");
+    }
+    assert_eq!(czkp::ProofScope::name(), "ProofScope");
+    let mut referenced = Vec::new();
+    czkp::ProofScope::schemas(&mut referenced);
+}

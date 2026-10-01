@@ -4,6 +4,7 @@ permissions:
 concurrency:
   group: ci
   cancel-in-progress: false
+  queue: max
 jobs:
   resolve:
     runs-on: ubuntu-latest
@@ -19,7 +20,9 @@ jobs:
         node-version: 24
     - run: npm install --package-lock-only --ignore-scripts
     - name: Resolve one fresh dependency snapshot
-      run: 'cargo update
+      run: 'python3 .github/check-first-party.py
+
+        cargo update
 
         rustc --version > resolver.txt
 
@@ -87,15 +90,15 @@ jobs:
     - run: 'rustc --version
 
         cargo fmt --check || { cargo fmt; git diff > formatting.patch; exit 1; }'
-    - run: cargo clippy --locked --all-targets -- -D warnings
-    - run: cargo test --locked
+    - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+    - run: cargo test --locked --all-features
     - uses: actions/setup-node@v7
       with:
         node-version: 24
     - uses: taiki-e/install-action@v2
       with:
         tool: wasm-pack
-    - run: wasm-pack test --node
+    - run: wasm-pack test --node --all-features
     - run: node --test tests/abi.test.mjs
     - uses: actions/upload-artifact@v7
       if: failure()
@@ -133,13 +136,23 @@ jobs:
     - name: Measure real native round trips and failure paths
       run: cargo llvm-cov --locked --workspace --all-features --branch --no-cfg-coverage --no-cfg-coverage-nightly
         --ignore-filename-regex '/tests/' --json --output-path coverage.json
-    - name: Require complete line and branch coverage
-      run: python3 .github/check-coverage.py coverage.json
+    - name: Export independent source inventories from the same execution
+      run: |
+        cargo llvm-cov report --branch --ignore-filename-regex '/tests/' --lcov --output-path coverage.lcov
+        cargo llvm-cov report --branch --ignore-filename-regex '/tests/' --text --output-path coverage.txt
+    - name: Require complete source line and branch coverage
+      run: |
+        python3 .github/test-source-coverage.py
+        python3 .github/check-source-coverage.py coverage.lcov coverage.json coverage.txt
     - uses: actions/upload-artifact@v7
       if: always()
       with:
         name: coverage
         path: 'coverage.json
+
+          coverage.lcov
+
+          coverage.txt
 
           Cargo.lock
 

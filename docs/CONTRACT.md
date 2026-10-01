@@ -11,3 +11,7 @@ Barretenberg and Noir peer dependencies. The verifier accepts public statements
 and an application-supplied public-input encoder; the prover is holder-only and
 consumes witnesses transiently. The embedding authenticates artifact snapshots.
 No application account policy or persistent state lives in these adapters.
+
+Optional `schema` derives the existing `ProofScope` wire schema with Utoipa,
+matching Door's owner-type registry. This describes shape only; it grants no
+trust in member-supplied circuit/key digests. No parallel scope DTO is defined.
