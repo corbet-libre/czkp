@@ -33,6 +33,8 @@ fn signatures_and_canonical_encodings() {
     assert!(decode::<32>(&(public + "=")).is_err());
     assert!(decode::<1>("__").is_err()); // Nonzero unused trailing bits.
     assert!(decode::<1>("A!").is_err());
+    assert!(decode::<32>(&"!".repeat(43)).is_err());
+    assert!(decode::<64>(&"!".repeat(86)).is_err());
     assert_eq!(decode::<1>("AA"), Ok([0]));
     assert_eq!(decode::<0>(""), Ok([]));
     assert!(field(&[255; 32], false).is_err());

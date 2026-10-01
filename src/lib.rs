@@ -38,7 +38,8 @@ pub fn signature(key: &str, bytes: &[u8], value: &str) -> Result<(), Error> {
     let signature = Signature::from_bytes(&decode::<64>(value)?);
     public
         .verify_strict(bytes, &signature)
-        .map_err(|_| Error::Signature)
+        .map_err(|_| Error::Signature)?;
+    Ok(())
 }
 
 pub fn digest(bytes: &[u8]) -> String {
