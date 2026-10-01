@@ -19,3 +19,9 @@ ABI, including nested structures. It rejects noncanonical fields, overflows,
 unsafe integers and extra struct members. Witness objects stay private.
 The prover can explicitly select upstream `Wasm` or `NativeUnixSocket`; explicit
 selection never silently falls back. Browser callers always use Wasm workers.
+
+## Continuous verification
+
+Dependency updates follow main and are tested against one CI-resolved lockfile.
+Line and branch coverage target 100%; failures remain blocking. See
+[the coverage contract](docs/COVERAGE.md) for measurement and exclusions.

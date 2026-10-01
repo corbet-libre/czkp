@@ -24,13 +24,13 @@ pub fn decode<const N: usize>(value: &str) -> Result<[u8; N], Error> {
     if value.len() != (N * 8).div_ceil(6) {
         return Err(Error::InvalidInput);
     }
-    let decoded = BASE64URL_NOPAD
-        .decode(value.as_bytes())
+    // The upstream canonical decoder rejects padding, ignored characters and
+    // nonzero trailing bits. The exact encoded length fixes the output length.
+    let mut decoded = [0; N];
+    BASE64URL_NOPAD
+        .decode_mut(value.as_bytes(), &mut decoded)
         .map_err(|_| Error::InvalidInput)?;
-    if BASE64URL_NOPAD.encode(&decoded) != value {
-        return Err(Error::InvalidInput);
-    }
-    decoded.try_into().map_err(|_| Error::InvalidInput)
+    Ok(decoded)
 }
 
 pub fn signature(key: &str, bytes: &[u8], value: &str) -> Result<(), Error> {
