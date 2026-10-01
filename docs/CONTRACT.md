@@ -15,3 +15,7 @@ No application account policy or persistent state lives in these adapters.
 Optional `schema` derives the existing `ProofScope` wire schema with Utoipa,
 matching Door's owner-type registry. This describes shape only; it grants no
 trust in member-supplied circuit/key digests. No parallel scope DTO is defined.
+The optional `schema` feature also exposes maintained Schemars `JsonSchema`
+for the same canonical `ProofScope` type. This lets containing owner types derive
+Serde-compatible tagged-enum schemas without duplicating the scope fields.
+Native and actual Wasm vectors check the fixed 32-byte bounds.

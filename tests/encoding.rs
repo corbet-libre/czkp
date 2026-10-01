@@ -80,4 +80,10 @@ fn proof_scope_schema_follows_the_wire_owner() {
     assert_eq!(czkp::ProofScope::name(), "ProofScope");
     let mut referenced = Vec::new();
     czkp::ProofScope::schemas(&mut referenced);
+    let json_schema = serde_json::to_value(schemars::schema_for!(czkp::ProofScope)).unwrap();
+    assert_eq!(json_schema["additionalProperties"], false);
+    for name in ["circuitDigest", "verifyingKeyDigest"] {
+        assert_eq!(json_schema["properties"][name]["minItems"], 32);
+        assert_eq!(json_schema["properties"][name]["maxItems"], 32);
+    }
 }
