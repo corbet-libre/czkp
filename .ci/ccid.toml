@@ -1,0 +1,22 @@
+schema = 1
+project = "czkp"
+
+[checks.native]
+kind = "commands"
+commands = [["bash", ".ci/check.sh", "native"]]
+
+[checks.wasm]
+kind = "commands"
+commands = [["bash", ".ci/check.sh", "wasm"]]
+
+[checks.coverage]
+kind = "commands"
+commands = [["bash", ".ci/check.sh", "coverage"]]
+
+[checks.dependency-policy]
+kind = "commands"
+commands = [["bash", ".ci/check.sh", "dependency-policy"]]
+
+[checks.resolve]
+kind = "commands"
+commands = [["bash", ".ci/check.sh", "resolve"]]

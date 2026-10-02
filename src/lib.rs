@@ -83,3 +83,7 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+/// Native public-proof process transport; no holder witnesses or state.
+#[cfg(all(feature = "process", not(target_arch = "wasm32")))]
+pub mod process;

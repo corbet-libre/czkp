@@ -71,7 +71,13 @@ def self_test():
 if __name__ == '__main__':
     self_test()
     if '--self-test' not in sys.argv:
-        paths = subprocess.check_output(['git', 'ls-files', '-z'], text=True).split('\0')
+        if '--archive' in sys.argv:
+            paths = [str(p) for p in Path('.').rglob('*') if p.name in {'Cargo.toml', 'Cargo.lock'}
+                     and not {'.git', 'target', 'node_modules', '.build'}.intersection(p.parts)]
+            if 'Cargo.toml' not in paths or 'Cargo.lock' not in paths:
+                raise ValueError('Missing archive root manifest or lock')
+        else:
+            paths = subprocess.check_output(['git', 'ls-files', '-z'], text=True).split('\0')
         for name in paths:
             path = Path(name)
             if path.name == 'Cargo.toml':

@@ -25,3 +25,5 @@ selection never silently falls back. Browser callers always use Wasm workers.
 Dependency updates follow main and are tested against one CI-resolved lockfile.
 Line and branch coverage target 100%; failures remain blocking. See
 [the coverage contract](docs/COVERAGE.md) for measurement and exclusions.
+
+The optional native `process` feature owns the bounded public-proof worker transport shared by the server verifier and member Wallet. It never receives holder witnesses. Its real-success fixture follows the public accounting owner main as validation source, separate from the Rust dependency graph. All existing line/branch gates remain unchanged.
