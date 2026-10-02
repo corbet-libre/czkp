@@ -13,6 +13,9 @@ pub struct ProofScope {
 }
 pub const MAX_INTEGER: u64 = 9_007_199_254_740_991;
 
+/// Original accounting epoch transcript. Wire values are not verified authority.
+pub mod record;
+
 pub fn scope(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 256
