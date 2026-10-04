@@ -124,3 +124,110 @@ fn fixed_leaf_transcript_and_epoch_blinding() {
         assert_eq!(bad.commitment(&[1; 32], 2), Err(Error::InvalidInput));
     }
 }
+
+const PERIOD: u64 = 86_400;
+
+fn next_epoch() -> Epoch {
+    let mut v = epoch();
+    v.epoch = 3;
+    v.starts_at = 259_200;
+    v.expires_at = 345_600;
+    v
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn successor_fencing_and_policy_binding() {
+    let good = epoch();
+    good.check_successor(&good, PERIOD).unwrap();
+    let mut higher = next_epoch();
+    higher.check_successor(&good, PERIOD).unwrap();
+    // Higher epoch may rotate independently-authorized material.
+    higher.root = [9; 32];
+    higher.download_digest = [8; 32];
+    higher.proof_scope.circuit_digest = [7; 32];
+    higher.leaf_count = 8192;
+    higher.check_successor(&good, PERIOD).unwrap();
+    assert_eq!(good.check_successor(&higher, PERIOD), Err(Error::Replay));
+    let mut rolled_policy = next_epoch();
+    rolled_policy.policy_epoch = 6;
+    assert_eq!(
+        rolled_policy.check_successor(&good, PERIOD),
+        Err(Error::Replay)
+    );
+    let mut same_rolled = good.clone();
+    same_rolled.policy_epoch = 6;
+    assert_eq!(
+        same_rolled.check_successor(&good, PERIOD),
+        Err(Error::Replay)
+    );
+    for case in 0..7 {
+        let mut bad = good.clone();
+        match case {
+            0 => bad.policy_epoch = 8,
+            1 => bad.root = [9; 32],
+            2 => bad.proof_scope.circuit_digest = [9; 32],
+            3 => bad.proof_scope.verifying_key_digest = [9; 32],
+            4 => bad.leaf_count = 8192,
+            5 => bad.download_digest = [9; 32],
+            6 => bad.download_bytes = 4097,
+            _ => unreachable!(),
+        }
+        assert_eq!(
+            bad.check_successor(&good, PERIOD),
+            Err(Error::PolicyMismatch)
+        );
+    }
+    for case in 0..10 {
+        let mut bad = good.clone();
+        match case {
+            0 => bad.community[0] ^= 1,
+            1 => bad.starts_at += 1,
+            2 => bad.expires_at += 1,
+            3 => bad.root = [0; 32],
+            4 => bad.proof_scope.circuit_digest = [0; 32],
+            5 => bad.proof_scope.verifying_key_digest = [0; 32],
+            6 => bad.leaf_count = 0,
+            7 => bad.download_digest = [0; 32],
+            8 => bad.download_bytes = 0,
+            9 => bad.download_bytes = MAX_DOWNLOAD_BYTES + 1,
+            _ => unreachable!(),
+        }
+        assert_eq!(bad.check_successor(&good, PERIOD), Err(Error::InvalidInput));
+        assert_eq!(good.check_successor(&bad, PERIOD), Err(Error::InvalidInput));
+    }
+    let mut forked = good.clone();
+    forked.community = [2; 32];
+    assert_eq!(
+        forked.check_successor(&good, PERIOD),
+        Err(Error::InvalidInput)
+    );
+    assert_eq!(good.check_successor(&good, 3600), Err(Error::InvalidInput));
+    assert_eq!(good.check_successor(&good, 0), Err(Error::InvalidInput));
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn object_digest_and_length_binding() {
+    let mut v = epoch();
+    v.download_bytes = 3;
+    v.download_digest = [
+        0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22,
+        0x23, 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00,
+        0x15, 0xad,
+    ];
+    v.check_object(b"abc").unwrap();
+    for bytes in [
+        b"ab".as_slice(),
+        b"abcd".as_slice(),
+        b"abd".as_slice(),
+        b"".as_slice(),
+    ] {
+        assert_eq!(v.check_object(bytes), Err(Error::InvalidInput));
+    }
+    for declared in [0, MAX_DOWNLOAD_BYTES + 1] {
+        let mut over = epoch();
+        over.download_bytes = declared;
+        assert_eq!(over.check_object(b"abc"), Err(Error::InvalidInput));
+    }
+}

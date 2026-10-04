@@ -74,6 +74,38 @@ impl Epoch {
         Ok(())
     }
 
+    /// Preserve one immutable descriptor per record epoch, independently of the
+    /// enclosing publication's revision. The caller authenticates both values
+    /// and supplies the same configured period; this does not grant authority.
+    /// Period changes need an explicit transition, never an implicit floor reset.
+    pub fn check_successor(&self, previous: &Self, period_seconds: u64) -> Result<(), Error> {
+        previous.validate(&previous.community, period_seconds)?;
+        self.validate(&previous.community, period_seconds)?;
+        if self.epoch < previous.epoch || self.policy_epoch < previous.policy_epoch {
+            return Err(Error::Replay);
+        }
+        if self.epoch == previous.epoch && self != previous {
+            return Err(Error::PolicyMismatch);
+        }
+        Ok(())
+    }
+
+    /// Match the complete public ciphertext object to its bounded descriptor.
+    /// This neither authenticates the descriptor nor decrypts a member witness.
+    /// Transports must enforce the same byte bound before allocating the input.
+    pub fn check_object(&self, bytes: &[u8]) -> Result<(), Error> {
+        if !(1..=MAX_DOWNLOAD_BYTES).contains(&self.download_bytes)
+            || bytes.len() as u64 != self.download_bytes
+        {
+            return Err(Error::InvalidInput);
+        }
+        let digest: [u8; 32] = Sha256::digest(bytes).into();
+        if digest != self.download_digest {
+            return Err(Error::InvalidInput);
+        }
+        Ok(())
+    }
+
     /// Depth of the power-of-two padded tree, at least one and at most 32.
     /// Index remains private in the proof, and must be below `leaf_count`.
     pub fn depth(&self) -> u32 {
