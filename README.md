@@ -20,6 +20,12 @@ unsafe integers and extra struct members. Witness objects stay private.
 The prover can explicitly select upstream `Wasm` or `NativeUnixSocket`; explicit
 selection never silently falls back. Browser callers always use Wasm workers.
 
+The `record` JavaScript entry shares the original frozen-leaf transcript and
+strict record-epoch public-input codec between Wallet and the proof worker. It
+keeps private frontier fields out of the public projection. It authenticates no
+descriptor, does not check the current time or newest policy epoch, and grants no
+verified-proof capability; those checks remain with the original relying owners.
+
 ## Continuous verification
 
 Dependency updates follow main and are tested against one CI-resolved lockfile.

@@ -7,6 +7,7 @@
     "./abi": "./runtime/abi.mjs",
     "./encoding": "./runtime/encoding.mjs",
     "./primitives": "./runtime/primitives.mjs",
+    "./record": "./runtime/record.mjs",
     "./verify": "./runtime/verify.mjs",
     "./prove": "./runtime/prove.mjs",
     "./node-verifier": "./runtime/node-verifier.mjs"

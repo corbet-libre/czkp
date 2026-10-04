@@ -110,7 +110,7 @@ jobs:
       with:
         tool: wasm-pack
     - run: wasm-pack test --node --all-features
-    - run: node --test tests/abi.test.mjs
+    - run: node --test tests/abi.test.mjs tests/record.test.mjs
     - uses: actions/upload-artifact@v7
       if: failure()
       with:
