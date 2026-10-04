@@ -19,6 +19,7 @@ const manifestBytes=Buffer.from(JSON.stringify(manifest));
 await writeFile(join(directory,'circuits.json'),circuits);await writeFile(join(directory,'keys.json'),keys);await writeFile(join(directory,'manifest.json'),manifestBytes);
 const config=join(directory,'config.json');await writeFile(config,JSON.stringify({directory,manifestSha256:sha(manifestBytes)}));
 const scope={circuitDigest:Array.from(Buffer.from(manifest.circuitSha256,'hex')),verifyingKeyDigest:Array.from(Buffer.from(manifest.vkSha256,'hex'))};
+const records=[];
 for(const fixture of JSON.parse(await readFile(join(original,'records.json')))){
   const flat=await validateStatement(fixture.statement);let at=0;
   function shape(t){
@@ -30,6 +31,7 @@ for(const fixture of JSON.parse(await readFile(join(original,'records.json')))){
   assert.equal(at,flat.length);
   const record={statement:{circuit:'account',input},proof:fixture.proof,proofScope:scope};
   assert.equal((await verify(record,config)).verified,true);
+  records.push(record);
   const bad=structuredClone(record);bad.statement.input.community[0]=(Number(bad.statement.input.community[0])^1).toString();
   await assert.rejects(verify(bad,config));
   const corrupt=structuredClone(record);corrupt.proof=(record.proof.startsWith('00')?'01':'00')+record.proof.slice(2);
@@ -37,4 +39,7 @@ for(const fixture of JSON.parse(await readFile(join(original,'records.json')))){
   const wrong=structuredClone(record);wrong.proofScope.verifyingKeyDigest[0]^=1;
   await assert.rejects(verify(wrong,config));
 }
+// Retain only the genuine public statements/proofs for the Rust process tests.
+// Those tests exercise the shipped neutral worker CLI, beyond this direct import.
+await writeFile(join(directory,'records.json'),JSON.stringify(records));
 console.log('Generic suite verified real account proofs and refused tampering');
