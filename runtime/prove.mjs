@@ -2,8 +2,8 @@
 // The embedding validates policy inputs and keeps the resulting openings itself.
 import { openBackend } from './backend.mjs';
 import { OPTIONS } from './encoding.mjs';
-export async function createProver({artifacts, browserFactory, backendType}) {
-  const api=await openBackend(artifacts,browserFactory,backendType);
+export async function createProver({artifacts, browserFactory, backendType, threads}) {
+  const api=await openBackend(artifacts,browserFactory,backendType,false,threads);
   try {
     const { Noir }=await import('@noir-lang/noir_js');
     const { UltraHonkBackend, UltraHonkVerifierBackend }=await import('@aztec/bb.js');

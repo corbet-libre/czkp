@@ -127,6 +127,76 @@ fn fixed_leaf_transcript_and_epoch_blinding() {
 
 const PERIOD: u64 = 86_400;
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn maintained_presentation_signature_refuses_substitution_and_expiry() {
+    use czkp::record::{Context, Presentation, Record, Use, presentation_key_commitment};
+    use ed25519_dalek::{Signer, SigningKey};
+    let key = SigningKey::from_bytes(&[7; 32]);
+    let context = Context {
+        purpose: Use::ForumListing,
+        challenge: [8; 32],
+        expires_at: 173000,
+    };
+    let record = Record {
+        epoch: epoch(),
+        owner: [9; 32],
+        presentation_key_commitment: presentation_key_commitment(&key.verifying_key().to_bytes()),
+        shares: None,
+    };
+    let presentation = Presentation {
+        signature: key
+            .sign(&record.presentation_bytes(&context).unwrap())
+            .to_bytes()
+            .to_vec(),
+        public_key: key.verifying_key().to_bytes(),
+        record: record.clone(),
+        context: context.clone(),
+        proof: "aabb".into(),
+    };
+    // Binding only, deliberately NOT proof acceptance. Real proofs are exercised
+    // by the original issuer fixture in the relation's owning repository.
+    presentation
+        .check_binding(&context, &epoch(), &[9; 32], 172900)
+        .unwrap();
+    for case in 0..12 {
+        let mut bad = presentation.clone();
+        match case {
+            0 => bad.context.challenge[0] ^= 1,
+            1 => bad.context.purpose = Use::FirstContact,
+            2 => bad.context.expires_at += 1,
+            3 => bad.record.epoch.epoch += 1,
+            4 => bad.record.epoch.root[0] ^= 1,
+            5 => bad.record.owner[0] ^= 1,
+            6 => bad.record.shares = Some([0, 0, 10000]),
+            7 => bad.public_key[0] ^= 1,
+            8 => bad.signature[0] ^= 1,
+            9 => bad.proof.clear(),
+            10 => bad.record.presentation_key_commitment[0] ^= 1,
+            _ => bad.record.epoch.download_digest[0] ^= 1,
+        }
+        assert!(
+            bad.check_binding(&context, &epoch(), &[9; 32], 172900)
+                .is_err()
+        );
+    }
+    assert!(
+        presentation
+            .check_binding(&context, &epoch(), &[9; 32], 173000)
+            .is_err()
+    );
+    assert!(
+        presentation
+            .check_binding(&context, &epoch(), &[9; 32], 172799)
+            .is_err()
+    );
+    assert!(
+        presentation
+            .check_binding(&context, &next_epoch(), &[9; 32], 259200)
+            .is_err()
+    );
+}
+
 fn next_epoch() -> Epoch {
     let mut v = epoch();
     v.epoch = 3;

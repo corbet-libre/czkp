@@ -4,6 +4,9 @@ use crate::{Error, MAX_INTEGER};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+mod presentation;
+pub use presentation::{Context, Presentation, Record, Use, presentation_key_commitment};
+
 /// Bounded common object transport, independent of the configured epoch duration.
 pub const MAX_DOWNLOAD_BYTES: u64 = 64 * 1024 * 1024;
 
