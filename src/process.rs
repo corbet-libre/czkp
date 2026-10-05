@@ -32,6 +32,71 @@ pub struct ProcessVerifier {
     active: Arc<AtomicUsize>,
 }
 
+/// Value-free failure from one verification attempt. This never contains a
+/// request, worker output, stderr, path, OS error message or exit-code value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProcessVerificationFailure {
+    /// The proof or serialized request exceeds the configured input contract.
+    InvalidInput,
+    /// All configured worker permits are in use.
+    Capacity,
+    /// The configured executable could not be started.
+    Spawn,
+    /// A configured child pipe was unavailable.
+    Pipe,
+    /// The child exceeded its configured deadline; kill and reap were attempted.
+    Timeout,
+    /// Observing the child status failed; cleanup was attempted.
+    Wait,
+    /// The child returned an unsuccessful exit code.
+    WorkerExit,
+    /// The child terminated without an exit code, for example by a signal.
+    WorkerTerminated,
+    /// Writing the complete request failed.
+    Write,
+    /// Reading the bounded response failed.
+    Read,
+    /// The response exceeded its fixed byte limit.
+    OutputTooLarge,
+    /// The response was not an exact verdict envelope.
+    VerdictDecode,
+    /// The worker returned an explicit negative verdict.
+    ProofRejected,
+    /// The verdict did not name the configured proof scope.
+    ScopeMismatch,
+}
+
+impl ProcessVerificationFailure {
+    /// The original public error, preserving the ordinary verifier contract.
+    pub fn error(self) -> Error {
+        match self {
+            Self::InvalidInput => Error::InvalidInput,
+            Self::Capacity => Error::Capacity,
+            _ => Error::CryptoProvider,
+        }
+    }
+
+    /// A fixed label suitable for a bounded diagnostic, without request values.
+    pub fn category(self) -> &'static str {
+        match self {
+            Self::InvalidInput => "invalid_input",
+            Self::Capacity => "capacity",
+            Self::Spawn => "spawn",
+            Self::Pipe => "pipe",
+            Self::Timeout => "timeout",
+            Self::Wait => "wait",
+            Self::WorkerExit => "worker_exit",
+            Self::WorkerTerminated => "worker_terminated",
+            Self::Write => "write",
+            Self::Read => "read",
+            Self::OutputTooLarge => "output_too_large",
+            Self::VerdictDecode => "verdict_decode",
+            Self::ProofRejected => "proof_rejected",
+            Self::ScopeMismatch => "scope_mismatch",
+        }
+    }
+}
+
 impl ProcessVerifier {
     pub fn new(config: ProcessVerifierConfig) -> Result<Self, Error> {
         if !config.node.is_absolute()
@@ -67,14 +132,25 @@ impl ProcessVerifier {
     }
 
     pub fn verify(&self, statement: &impl Serialize, proof: &[u8]) -> Result<(), Error> {
+        self.verify_detailed(statement, proof)
+            .map_err(ProcessVerificationFailure::error)
+    }
+
+    /// Verify through the same worker and acceptance checks, retaining only a
+    /// value-free failure category for this call. No global diagnostic is stored.
+    pub fn verify_detailed(
+        &self,
+        statement: &impl Serialize,
+        proof: &[u8],
+    ) -> Result<(), ProcessVerificationFailure> {
         if proof.is_empty() || proof.len() > self.config.max_proof_bytes {
-            return Err(Error::InvalidInput);
+            return Err(ProcessVerificationFailure::InvalidInput);
         }
         self.active
             .try_update(Ordering::AcqRel, Ordering::Acquire, |n| {
                 (n < self.config.maximum_parallel).then_some(n + 1)
             })
-            .map_err(|_| Error::Capacity)?;
+            .map_err(|_| ProcessVerificationFailure::Capacity)?;
         let _permit = ActivePermit(self.active.clone());
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
@@ -97,13 +173,13 @@ impl ProcessVerifier {
                 proof_scope: &self.config.scope,
             },
         )
-        .or(Err(Error::InvalidInput))?;
+        .or(Err(ProcessVerificationFailure::InvalidInput))?;
         let written = limit - remaining.len();
         bytes.truncate(written);
         self.verify_bytes(bytes)
     }
 
-    fn verify_bytes(&self, bytes: Vec<u8>) -> Result<(), Error> {
+    fn verify_bytes(&self, bytes: Vec<u8>) -> Result<(), ProcessVerificationFailure> {
         let mut child = Command::new(&self.config.node)
             .arg(format!(
                 "--max-old-space-size={}",
@@ -117,11 +193,14 @@ impl ProcessVerifier {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
-            .or(Err(Error::CryptoProvider))?;
+            .or(Err(ProcessVerificationFailure::Spawn))?;
         // Dedicated bounded readers avoid pipe deadlock. Kill and reap on every
         // deadline/error before joining them. The shipped worker spawns no children.
-        let mut stdin = child.stdin.take().ok_or(Error::CryptoProvider)?;
-        let stdout = child.stdout.take().ok_or(Error::CryptoProvider)?;
+        let mut stdin = child.stdin.take().ok_or(ProcessVerificationFailure::Pipe)?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or(ProcessVerificationFailure::Pipe)?;
         let writer = thread::spawn(move || stdin.write_all(&bytes));
         let reader = thread::spawn(move || {
             let mut bytes = Vec::new();
@@ -130,22 +209,40 @@ impl ProcessVerifier {
         let deadline = Instant::now() + self.config.timeout;
         let status = loop {
             match child.try_wait() {
-                Ok(Some(status)) => break Some(status),
+                Ok(Some(status)) => break Ok(status),
                 Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(5)),
-                _ => {
+                result => {
+                    let failure = if result.is_err() {
+                        ProcessVerificationFailure::Wait
+                    } else {
+                        ProcessVerificationFailure::Timeout
+                    };
                     let _ = child.kill();
                     let _ = child.wait();
-                    break None;
+                    break Err(failure);
                 }
             }
         };
         let wrote = writer.join().ok().is_some_and(|v| v.is_ok());
-        let output = reader
-            .join()
-            .or(Err(Error::CryptoProvider))?
-            .or(Err(Error::CryptoProvider))?;
-        if !wrote || !status.is_some_and(|v| v.success()) || output.len() > 4096 {
-            return Err(Error::CryptoProvider);
+        let output = reader.join();
+        // Join both pipes before returning. Child lifecycle failures take
+        // precedence over a broken pipe caused by that same child failure.
+        let status = status?;
+        if !status.success() {
+            return Err(if status.code().is_some() {
+                ProcessVerificationFailure::WorkerExit
+            } else {
+                ProcessVerificationFailure::WorkerTerminated
+            });
+        }
+        if !wrote {
+            return Err(ProcessVerificationFailure::Write);
+        }
+        let output = output
+            .or(Err(ProcessVerificationFailure::Read))?
+            .or(Err(ProcessVerificationFailure::Read))?;
+        if output.len() > 4096 {
+            return Err(ProcessVerificationFailure::OutputTooLarge);
         }
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -153,9 +250,13 @@ impl ProcessVerifier {
             verified: bool,
             proof_scope: ProofScope,
         }
-        let verdict: Verdict = serde_json::from_slice(&output).or(Err(Error::CryptoProvider))?;
-        if !verdict.verified || verdict.proof_scope != self.config.scope {
-            return Err(Error::CryptoProvider);
+        let verdict: Verdict =
+            serde_json::from_slice(&output).or(Err(ProcessVerificationFailure::VerdictDecode))?;
+        if !verdict.verified {
+            return Err(ProcessVerificationFailure::ProofRejected);
+        }
+        if verdict.proof_scope != self.config.scope {
+            return Err(ProcessVerificationFailure::ScopeMismatch);
         }
         Ok(())
     }
