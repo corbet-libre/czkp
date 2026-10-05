@@ -42,7 +42,7 @@ fn maintained_account_proofs_bind_state_and_refuse_tampering() {
         let proof = data_encoding::HEXLOWER
             .decode(record.proof.as_bytes())
             .unwrap();
-        assert!(verifier.verify(&record.statement, &proof).is_ok());
+        assert_eq!(verifier.verify_detailed(&record.statement, &proof), Ok(()));
         let mut corrupt = proof.clone();
         corrupt[0] ^= 1;
         assert!(verifier.verify(&record.statement, &corrupt).is_err());
@@ -81,7 +81,7 @@ fn maintained_neutral_suite_proofs_cross_the_rust_process_boundary() {
         let proof = data_encoding::HEXLOWER
             .decode(record.proof.as_bytes())
             .unwrap();
-        assert!(verifier.verify(&record.statement, &proof).is_ok());
+        assert_eq!(verifier.verify_detailed(&record.statement, &proof), Ok(()));
 
         let mut corrupt = proof.clone();
         corrupt[0] ^= 1;

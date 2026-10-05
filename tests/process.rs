@@ -1,6 +1,6 @@
 #![cfg(all(feature = "process", not(target_arch = "wasm32")))]
 //! Integration tests for the public contract.
-use czkp::process::{ProcessVerifier, ProcessVerifierConfig};
+use czkp::process::{ProcessVerificationFailure, ProcessVerifier, ProcessVerifierConfig};
 use czkp::{Error, ProofScope};
 use std::{fs, time::Duration};
 fn node() -> std::path::PathBuf {
@@ -37,6 +37,10 @@ fn reject_bad_configuration_and_failed_worker() {
     assert_eq!(
         verifier.verify(&invalid_statement, &[1]),
         Err(Error::InvalidInput)
+    );
+    assert_eq!(
+        verifier.verify_detailed(&invalid_statement, &[1]),
+        Err(ProcessVerificationFailure::InvalidInput)
     );
     assert_eq!(
         verifier.verify(&"x".repeat(128 * 1024), &[1]),
@@ -168,14 +172,21 @@ fn bounded_process_capacity_is_shared_and_released_after_timeout() {
     .unwrap();
     let verifier = ProcessVerifier::new(config.clone()).unwrap();
     let busy = verifier.clone();
-    let worker = std::thread::spawn(move || busy.verify(&1, &[1]));
+    let worker = std::thread::spawn(move || busy.verify_detailed(&1, &[1]));
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     while !marker.exists() {
         assert!(std::time::Instant::now() < deadline);
         std::thread::sleep(Duration::from_millis(5));
     }
     assert_eq!(verifier.verify(&1, &[1]), Err(Error::Capacity));
-    assert_eq!(worker.join().unwrap(), Err(Error::CryptoProvider));
+    assert_eq!(
+        verifier.verify_detailed(&1, &[1]),
+        Err(ProcessVerificationFailure::Capacity)
+    );
+    assert_eq!(
+        worker.join().unwrap(),
+        Err(ProcessVerificationFailure::Timeout)
+    );
     fs::write(
         &config.script,
         "process.stdin.resume(); process.exitCode=1;",
@@ -214,5 +225,102 @@ fn valid_json_cannot_turn_refusal_or_foreign_scope_into_acceptance() {
         )
         .unwrap();
         assert_eq!(verifier.verify(&1, &[1]), Err(Error::CryptoProvider));
+        assert_eq!(
+            verifier.verify_detailed(&1, &[1]),
+            Err(if verified {
+                ProcessVerificationFailure::ScopeMismatch
+            } else {
+                ProcessVerificationFailure::ProofRejected
+            })
+        );
     }
+}
+
+#[test]
+fn per_call_failure_distinguishes_lifecycle_from_bounded_verdict_refusal() {
+    use ProcessVerificationFailure as Failure;
+    let dir = tempfile::tempdir().unwrap();
+    let config = ProcessVerifierConfig {
+        node: node(),
+        script: dir.path().join("worker.mjs"),
+        artifact_config: dir.path().join("config.json"),
+        scope: ProofScope {
+            circuit_digest: [1; 32],
+            verifying_key_digest: [2; 32],
+        },
+        timeout: Duration::from_secs(5),
+        maximum_parallel: 1,
+        max_proof_bytes: 1024 * 1024,
+        node_heap_megabytes: 64,
+    };
+    let verifier = ProcessVerifier::new(config.clone()).unwrap();
+    let clone = verifier.clone();
+    // Every actual child here refuses. No transport stub fabricates accepted
+    // crypto. Reuse both handles to detect stale per-call state or leaked permits.
+    for (script, failure, category) in [
+        (
+            "process.stdin.resume(); process.stderr.write('PRIVATE-WORKER-MARKER'); process.exitCode=23;",
+            Failure::WorkerExit,
+            "worker_exit",
+        ),
+        (
+            "process.stdin.resume(); process.stdout.write('PRIVATE-OUTPUT-MARKER');",
+            Failure::VerdictDecode,
+            "verdict_decode",
+        ),
+        (
+            "process.stdin.resume(); process.stdout.write('x'.repeat(5000));",
+            Failure::OutputTooLarge,
+            "output_too_large",
+        ),
+    ] {
+        fs::write(&config.script, script).unwrap();
+        let actual = verifier.verify_detailed(&"PRIVATE-REQUEST-MARKER", &[1]);
+        assert_eq!(actual, Err(failure));
+        assert_eq!(actual.unwrap_err().category(), category);
+        assert_eq!(clone.verify(&1, &[1]), Err(failure.error()));
+    }
+    // An abnormal termination is distinct from the worker's explicit exit.
+    #[cfg(unix)]
+    {
+        fs::write(
+            &config.script,
+            "process.stdin.resume(); process.stdin.on('end',()=>process.kill(process.pid,'SIGKILL'));",
+        )
+        .unwrap();
+        assert_eq!(
+            verifier.verify_detailed(&1, &[1]),
+            Err(Failure::WorkerTerminated)
+        );
+        assert_eq!(clone.verify(&1, &[1]), Err(Error::CryptoProvider));
+    }
+    // A short-lived failed worker can also break the pending request pipe.
+    // Preserve the lifecycle cause rather than reporting the secondary write.
+    fs::write(&config.script, "process.exit(23);").unwrap();
+    assert_eq!(
+        verifier.verify_detailed(&1, &vec![1; config.max_proof_bytes]),
+        Err(Failure::WorkerExit)
+    );
+    fs::write(&config.script, "process.exit(0);").unwrap();
+    assert_eq!(
+        verifier.verify_detailed(&1, &vec![1; config.max_proof_bytes]),
+        Err(Failure::Write)
+    );
+    assert_eq!(
+        clone.verify(&1, &vec![1; config.max_proof_bytes]),
+        Err(Error::CryptoProvider)
+    );
+    assert_eq!(
+        verifier.verify_detailed(&1, &[]),
+        Err(Failure::InvalidInput)
+    );
+    assert_eq!(
+        verifier.verify_detailed(&"x".repeat(3 * 1024 * 1024), &[1]),
+        Err(Failure::InvalidInput)
+    );
+    let mut unavailable = config;
+    unavailable.node = dir.path().join("absent-node");
+    let unavailable = ProcessVerifier::new(unavailable).unwrap();
+    assert_eq!(unavailable.verify_detailed(&1, &[1]), Err(Failure::Spawn));
+    assert_eq!(unavailable.verify(&1, &[1]), Err(Error::CryptoProvider));
 }
