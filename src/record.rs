@@ -5,16 +5,19 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 mod presentation;
-pub use presentation::{Context, Presentation, Record, Use, presentation_key_commitment};
+pub use presentation::{Context, Presentation, Record, Use, presentation_key};
 
 /// Bounded common object transport, independent of the configured epoch duration.
+pub const MAX_LEAVES: u32 = 1 << 20;
+
+/// Bounded complete ciphertext object; independent of tree capacity.
 pub const MAX_DOWNLOAD_BYTES: u64 = 64 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(utoipa::ToSchema, schemars::JsonSchema))]
 pub enum Purpose {
-    #[serde(rename = "cblc.record-epoch.v1")]
-    RecordEpochV1,
+    #[serde(rename = "cblc.record-epoch.v3")]
+    RecordEpochV3,
 }
 
 /// Public descriptor carried inside the original signed Beacon material.
@@ -31,6 +34,8 @@ pub struct Epoch {
     pub starts_at: u64,
     pub expires_at: u64,
     pub root: [u8; 32],
+    /// Record issuer key authenticated by the original common epoch descriptor.
+    pub issuer_key: [u8; 32],
     pub proof_scope: crate::ProofScope,
     pub leaf_count: u32,
     /// SHA-256 of the complete shuffled, unlabeled ciphertext object.
@@ -54,9 +59,11 @@ impl Epoch {
             || self.epoch.checked_mul(period_seconds) != Some(self.starts_at)
             || self.starts_at.checked_add(period_seconds) != Some(self.expires_at)
             || self.root == [0; 32]
+            || self.issuer_key == [0; 32]
             || self.proof_scope.circuit_digest == [0; 32]
             || self.proof_scope.verifying_key_digest == [0; 32]
             || self.leaf_count == 0
+            || self.leaf_count > MAX_LEAVES
             || self.download_digest == [0; 32]
             || !(1..=MAX_DOWNLOAD_BYTES).contains(&self.download_bytes)
         {
@@ -109,7 +116,7 @@ impl Epoch {
         Ok(())
     }
 
-    /// Depth of the power-of-two padded tree, at least one and at most 32.
+    /// Depth of the power-of-two padded tree, at least one and at most 20 for a valid descriptor.
     /// Index remains private in the proof, and must be below `leaf_count`.
     pub fn depth(&self) -> u32 {
         (u32::BITS - self.leaf_count.saturating_sub(1).leading_zeros()).max(1)
@@ -119,7 +126,8 @@ impl Epoch {
 /// Private input held by the issuer while freezing the actual durable frontier
 /// and inside Wallet after HPKE decryption. No Debug or public-value projection.
 /// Supplying this value does not establish inclusion or accepted local state.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Leaf {
     pub owner: [u8; 32],
@@ -131,7 +139,7 @@ pub struct Leaf {
 
 impl Leaf {
     /// Fixed transcript consumed by the original record epoch circuit.
-    /// The maintained SHA-256 implementation performs all hashing.
+    /// The maintained Poseidon2 implementation performs all hashing.
     pub fn commitment(&self, community: &[u8; 32], epoch: u64) -> Result<[u8; 32], Error> {
         if epoch == 0
             || epoch > MAX_INTEGER
@@ -141,15 +149,83 @@ impl Leaf {
             return Err(Error::InvalidInput);
         }
         crate::field(&self.state, true)?;
-        let mut hash = Sha256::new();
-        hash.update(b"cblc.record-frontier.v1\0");
-        hash.update(community);
-        hash.update(epoch.to_be_bytes());
-        hash.update(self.owner);
-        hash.update(self.version.to_be_bytes());
-        hash.update(self.state);
-        hash.update(self.required_inbox);
-        hash.update(self.blinding);
-        Ok(hash.finalize().into())
+        use crate::poseidon::{hash, integer, limbs};
+        let mut inputs = vec![epoch_domain(), integer(1)];
+        inputs.extend(limbs(community));
+        inputs.push(integer(epoch));
+        inputs.extend(limbs(&self.owner));
+        inputs.push(integer(self.version));
+        inputs.push(self.state);
+        inputs.extend(limbs(&self.required_inbox));
+        inputs.extend(limbs(&self.blinding));
+        hash(&inputs)
     }
+}
+
+fn epoch_domain() -> [u8; 32] {
+    let mut domain = [0; 32];
+    let text = b"cblc.record-epoch.v2";
+    domain[32 - text.len()..].copy_from_slice(text);
+    domain
+}
+
+/// Poseidon2 adapter for the existing maintained Merkle tree library. Only
+/// internal nodes (two bytes32 children) are hashed; leaves are already blinded.
+#[derive(Clone)]
+pub struct EpochTree;
+impl rs_merkle::Hasher for EpochTree {
+    type Hash = [u8; 32];
+    fn hash(data: &[u8]) -> Self::Hash {
+        use crate::poseidon::{hash, integer, limbs};
+        // rs_merkle combines exactly two fixed-width child hashes.
+        assert_eq!(data.len(), 64);
+        let mut inputs = vec![epoch_domain(), integer(2)];
+        for child in data.chunks_exact(32) {
+            let mut bytes = [0; 32];
+            bytes.copy_from_slice(child);
+            inputs.extend(limbs(&bytes));
+        }
+        hash(&inputs).expect("domain and 128-bit limbs are canonical fields")
+    }
+}
+
+/// Same private packet shape for frozen and necessarily descended frontiers.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SignedLeaf {
+    /// Private opening of the public blinded leaf.
+    pub leaf: Leaf,
+    /// Standard Ed25519 signature on community, epoch and the blinded leaf.
+    pub signature: Vec<u8>,
+}
+/// Domain-separated issuer statement for both frozen and descendant leaves.
+pub fn certificate_bytes(
+    community: &[u8; 32],
+    epoch: u64,
+    leaf: &[u8; 32],
+) -> Result<Vec<u8>, Error> {
+    if *community == [0; 32] || epoch == 0 || epoch > MAX_INTEGER {
+        return Err(Error::InvalidInput);
+    }
+    crate::field(leaf, true)?;
+    let mut bytes = b"cblc.record-leaf.v1\0".to_vec();
+    bytes.extend_from_slice(community);
+    bytes.extend_from_slice(&epoch.to_be_bytes());
+    bytes.extend_from_slice(leaf);
+    Ok(bytes)
+}
+/// Native verification supplements the small opening/count/share circuit.
+pub fn verify_certificate(
+    key: &[u8; 32],
+    community: &[u8; 32],
+    epoch: u64,
+    leaf: &[u8; 32],
+    signature: &[u8],
+) -> Result<(), Error> {
+    let key = ed25519_dalek::VerifyingKey::from_bytes(key).map_err(|_| Error::Signature)?;
+    let signature =
+        ed25519_dalek::Signature::from_slice(signature).map_err(|_| Error::Signature)?;
+    key.verify_strict(&certificate_bytes(community, epoch, leaf)?, &signature)
+        .map_err(|_| Error::Signature)
 }

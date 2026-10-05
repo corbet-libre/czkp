@@ -5,13 +5,16 @@ use czkp::{Error, MAX_INTEGER};
 
 fn epoch() -> Epoch {
     Epoch {
-        purpose: Purpose::RecordEpochV1,
+        purpose: Purpose::RecordEpochV3,
         community: [1; 32],
         policy_epoch: 7,
         epoch: 2,
         starts_at: 172800,
         expires_at: 259200,
         root: [2; 32],
+        issuer_key: ed25519_dalek::SigningKey::from_bytes(&[19; 32])
+            .verifying_key()
+            .to_bytes(),
         proof_scope: czkp::ProofScope {
             circuit_digest: [4; 32],
             verifying_key_digest: [5; 32],
@@ -32,7 +35,7 @@ fn configured_epoch_and_transport_refusals() {
     good.check_time(172800).unwrap();
     good.check_time(259199).unwrap();
     assert_eq!(good.check_time(259200), Err(Error::Expired));
-    for case in 0..15 {
+    for case in 0..17 {
         let mut bad = good.clone();
         match case {
             0 => bad.community[0] ^= 1,
@@ -50,6 +53,8 @@ fn configured_epoch_and_transport_refusals() {
             12 => bad.download_bytes = MAX_DOWNLOAD_BYTES + 1,
             13 => bad.proof_scope.circuit_digest = [0; 32],
             14 => bad.proof_scope.verifying_key_digest = [0; 32],
+            15 => bad.leaf_count = (1 << 20) + 1,
+            16 => bad.issuer_key = [0; 32],
             _ => unreachable!(),
         }
         assert_eq!(bad.validate(&[1; 32], 86400), Err(Error::InvalidInput));
@@ -57,7 +62,7 @@ fn configured_epoch_and_transport_refusals() {
     for period in [0, 3600, MAX_INTEGER + 1, MAX_INTEGER] {
         assert_eq!(good.validate(&[1; 32], period), Err(Error::InvalidInput));
     }
-    for (count, depth) in [(1, 1), (2, 1), (3, 2), (4, 2), (5, 3), (u32::MAX, 32)] {
+    for (count, depth) in [(1, 1), (2, 1), (3, 2), (4, 2), (5, 3), (1 << 20, 20)] {
         let mut value = good.clone();
         value.leaf_count = count;
         assert_eq!(value.depth(), depth);
@@ -86,12 +91,10 @@ fn leaf() -> Leaf {
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[cfg_attr(not(target_arch = "wasm32"), test)]
 fn fixed_leaf_transcript_and_epoch_blinding() {
-    let expected = [
-        0x3e, 0x82, 0x79, 0x2a, 0x73, 0x83, 0x29, 0x9a, 0x04, 0x51, 0x7c, 0x02, 0x07, 0xc1, 0xbc,
-        0xac, 0xda, 0xbd, 0x4a, 0x36, 0x1f, 0xe6, 0x11, 0xc8, 0x0f, 0xb5, 0xbb, 0x0c, 0xa9, 0x37,
-        0x02, 0x3f,
-    ];
-    assert_eq!(leaf().commitment(&[1; 32], 2).unwrap(), expected);
+    // Library-level domain/injectivity refusals. Noir/BB interoperability is
+    // checked with actual frozen issuer leaves and real record proofs in CI.
+    let expected = leaf().commitment(&[1; 32], 2).unwrap();
+    czkp::field(&expected, true).unwrap();
     for case in 0..5 {
         let mut changed = leaf();
         match case {
@@ -130,7 +133,7 @@ const PERIOD: u64 = 86_400;
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[cfg_attr(not(target_arch = "wasm32"), test)]
 fn maintained_presentation_signature_refuses_substitution_and_expiry() {
-    use czkp::record::{Context, Presentation, Record, Use, presentation_key_commitment};
+    use czkp::record::{Context, Presentation, Record, Use, presentation_key};
     use ed25519_dalek::{Signer, SigningKey};
     let key = SigningKey::from_bytes(&[7; 32]);
     let context = Context {
@@ -141,7 +144,14 @@ fn maintained_presentation_signature_refuses_substitution_and_expiry() {
     let record = Record {
         epoch: epoch(),
         owner: [9; 32],
-        presentation_key_commitment: presentation_key_commitment(&key.verifying_key().to_bytes()),
+        presentation_key: presentation_key(&key.verifying_key().to_bytes()),
+        blinded_leaf: [1; 32],
+        certificate: ed25519_dalek::Signer::sign(
+            &ed25519_dalek::SigningKey::from_bytes(&[19; 32]),
+            &czkp::record::certificate_bytes(&[1; 32], 2, &[1; 32]).unwrap(),
+        )
+        .to_bytes()
+        .to_vec(),
         shares: None,
     };
     let presentation = Presentation {
@@ -159,7 +169,7 @@ fn maintained_presentation_signature_refuses_substitution_and_expiry() {
     presentation
         .check_binding(&context, &epoch(), &[9; 32], 172900)
         .unwrap();
-    for case in 0..12 {
+    for case in 0..15 {
         let mut bad = presentation.clone();
         match case {
             0 => bad.context.challenge[0] ^= 1,
@@ -172,8 +182,11 @@ fn maintained_presentation_signature_refuses_substitution_and_expiry() {
             7 => bad.public_key[0] ^= 1,
             8 => bad.signature[0] ^= 1,
             9 => bad.proof.clear(),
-            10 => bad.record.presentation_key_commitment[0] ^= 1,
-            _ => bad.record.epoch.download_digest[0] ^= 1,
+            10 => bad.record.presentation_key[0] ^= 1,
+            11 => bad.record.epoch.download_digest[0] ^= 1,
+            12 => bad.record.epoch.issuer_key[0] ^= 1,
+            13 => bad.record.blinded_leaf[0] ^= 1,
+            _ => bad.record.certificate[0] ^= 1,
         }
         assert!(
             bad.check_binding(&context, &epoch(), &[9; 32], 172900)

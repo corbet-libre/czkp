@@ -1,9 +1,12 @@
 // Holder-only import. Witnesses are consumed transiently, never recorded or logged.
 // The embedding validates policy inputs and keeps the resulting openings itself.
 import { openBackend } from './backend.mjs';
+import { verifyPublicCertificates,verifyPublicRecordCertificate } from './public-checks.mjs';
+import { verifyPublicPolicy } from './public-policy.mjs';
+import { fieldBytes,fieldValue } from './primitives.mjs';
 import { OPTIONS } from './encoding.mjs';
-export async function createProver({artifacts, browserFactory, backendType, threads}) {
-  const api=await openBackend(artifacts,browserFactory,backendType,false,threads);
+export async function createProver({artifacts, browserFactory, backendType, threads, background=false}) {
+  const api=await openBackend(artifacts,browserFactory,backendType,false,threads,background);
   try {
     const { Noir }=await import('@noir-lang/noir_js');
     const { UltraHonkBackend, UltraHonkVerifierBackend }=await import('@aztec/bb.js');
@@ -14,6 +17,9 @@ export async function createProver({artifacts, browserFactory, backendType, thre
         if(busy||destroyed) throw new Error('Prover busy or closed');busy=true;
         try {
           const start=performance.now();
+          await verifyPublicCertificates(artifacts.circuit,expectedPublicInputs,async fields=>fieldValue((await api.poseidon2Hash({inputs:fields.map(fieldBytes)})).hash));
+          await verifyPublicPolicy(artifacts.circuit,expectedPublicInputs);
+          await verifyPublicRecordCertificate(artifacts.circuit,expectedPublicInputs);
           const executed=await noir.execute(witnessInputs);
           const prepared=performance.now();
           const proof=await backend.generateProof(executed.witness,OPTIONS);

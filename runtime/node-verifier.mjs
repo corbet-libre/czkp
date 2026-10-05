@@ -6,6 +6,8 @@ import {pathToFileURL} from 'node:url';
 import {publicInputs} from './abi.mjs';
 import {createVerifier} from './verify.mjs';
 import {unhex} from './encoding.mjs';
+import {loadCircuitSetup} from './setup.mjs';
+import {updateCircuit} from './update.mjs';
 const exact=(v,k)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===k.length&&k.every(x=>Object.hasOwn(v,x));
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const equal=(a,b)=>Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((v,i)=>v===b[i]);
@@ -28,16 +30,12 @@ export async function verify(record,path){
     ||!exact(record.statement,['circuit','input']))throw new Error('Public proof scope');
   const circuits=JSON.parse(circuitsBytes),keys=JSON.parse(keysBytes),kind=record.statement.circuit;
   if(typeof kind!=='string'||!Object.hasOwn(circuits,kind)||!Object.hasOwn(keys,kind))throw new Error('Unknown suite circuit');
-  const setup={};
-  for(const item of manifest.setup){
-    if(!['g1.dat','g2.dat'].includes(item.name)||Object.hasOwn(setup,item.name)||!Number.isSafeInteger(item.bytes)||item.bytes<=0||item.bytes>128*1024*1024)throw new Error('Setup description');
-    const bytes=await bounded(resolve(config.directory,'setup',item.name),item.bytes);
-    if(bytes.length!==item.bytes||sha(bytes)!==item.sha256)throw new Error('Setup authentication');setup[item.name]=bytes;
-  }
-  if(setup['g1.dat']?.length!==manifest.numPoints*32||setup['g2.dat']?.length!==128)throw new Error('Setup completeness');
+  if(kind.startsWith('update_')&&kind!==updateCircuit(record.statement.input))throw new Error('Wrong update verification key');
+  if(kind==='update'&&manifest.circuitSetup?.update_genesis)throw new Error('Monolithic update is benchmark-only');
+  const loadSetup=verificationOnly=>loadCircuitSetup(manifest,kind,(name,max)=>bounded(resolve(config.directory,'setup',name),max),verificationOnly);
   const circuit=circuits[kind];
   if(!exact(record.statement.input,circuit.abi.parameters.filter(p=>p.visibility==='public').map(p=>p.name)))throw new Error('Exact public ABI required');
-  const verifier=await createVerifier({artifacts:{manifest,circuit,verificationKey:unhex(keys[kind]),setup,limits:{memoryPages:65536,maxProofBytes:1024*1024}},
+  const verifier=await createVerifier({artifacts:{manifest,circuit,verificationKey:unhex(keys[kind]),loadSetup,limits:{memoryPages:65536,maxProofBytes:1024*1024}},
     publicInputs:input=>publicInputs(circuit,input)});
   try{return await verifier.verify({...record,statement:record.statement.input});}finally{await verifier.destroy();}
 }

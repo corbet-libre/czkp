@@ -90,3 +90,9 @@ impl std::error::Error for Error {}
 /// Native public-proof process transport; no holder witnesses or state.
 #[cfg(all(feature = "process", not(target_arch = "wasm32")))]
 pub mod process;
+
+/// Maintained Poseidon2 with canonical cross-runtime encodings.
+pub mod poseidon;
+
+/// Versioned compact signing transcripts using maintained Poseidon2.
+pub mod compact;
