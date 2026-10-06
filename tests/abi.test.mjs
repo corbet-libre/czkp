@@ -20,3 +20,14 @@ test('noncanonical input cannot truncate into an honest public statement',()=>{
   assert.throws(()=>publicInputs(circuit,{context:{present:1,bytes:[1,2]}}));
   assert.throws(()=>witnessInputs(circuit,{context:{present:true,bytes:[1,2]},secret:1,extra:0}));
 });
+
+// Candidate public certificate refusals share the existing CI test entry.
+import "./public-checks.test.mjs";
+
+import "./setup.test.mjs";
+
+import "./update.test.mjs";
+
+import "./compact.test.mjs";
+
+import './backend.test.mjs';

@@ -7,8 +7,16 @@
     "./abi": "./runtime/abi.mjs",
     "./encoding": "./runtime/encoding.mjs",
     "./primitives": "./runtime/primitives.mjs",
+    "./record": "./runtime/record.mjs",
     "./verify": "./runtime/verify.mjs",
-    "./prove": "./runtime/prove.mjs"
+    "./prove": "./runtime/prove.mjs",
+    "./node-verifier": "./runtime/node-verifier.mjs",
+    "./public-checks": "./runtime/public-checks.mjs",
+    "./setup": "./runtime/setup.mjs",
+    "./update": "./runtime/update.mjs",
+    "./public-policy": "./runtime/public-policy.mjs",
+    "./compact": "./runtime/compact.mjs",
+    "./backend": "./runtime/backend.mjs"
   },
   "license": "LGPL-3.0-only WITH LGPL-3.0-linking-exception",
   "peerDependencies": {

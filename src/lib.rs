@@ -13,6 +13,9 @@ pub struct ProofScope {
 }
 pub const MAX_INTEGER: u64 = 9_007_199_254_740_991;
 
+/// Original accounting epoch transcript. Wire values are not verified authority.
+pub mod record;
+
 pub fn scope(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 256
@@ -83,3 +86,13 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+/// Native public-proof process transport; no holder witnesses or state.
+#[cfg(all(feature = "process", not(target_arch = "wasm32")))]
+pub mod process;
+
+/// Maintained Poseidon2 with canonical cross-runtime encodings.
+pub mod poseidon;
+
+/// Versioned compact signing transcripts using maintained Poseidon2.
+pub mod compact;
