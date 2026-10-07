@@ -5,7 +5,7 @@ set -euo pipefail
 # source closure. On hosted CI resolve archives it once for all later jobs.
 if [[ "${1:-}" == acquire ]]; then
   test ! -e fixture-source
-  git clone --single-branch --branch main https://github.com/corbet-libs/cblc.git fixture-source
+  git clone --single-branch --branch main https://git.corbet.ch/corbet-libs/cblc.git fixture-source
   git -C fixture-source rev-parse HEAD > fixture-source.txt
   git -C fixture-source archive HEAD > fixture-source.tar
   sha256sum fixture-source.tar fixture-source/package-lock.json > fixture-source.sha256
