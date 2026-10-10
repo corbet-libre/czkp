@@ -88,7 +88,12 @@ fn verify(request: Request) -> Result<Verdict, Error> {
                     .iter()
                     .map(|value| value.to_vec())
                     .collect(),
-                proof.chunks_exact(32).map(<[u8]>::to_vec).collect(),
+                proof
+                    .as_chunks::<32>()
+                    .0
+                    .iter()
+                    .map(|value| value.to_vec())
+                    .collect(),
                 ProofSystemSettings {
                     ipa_accumulation: false,
                     oracle_hash_type: "poseidon2".into(),

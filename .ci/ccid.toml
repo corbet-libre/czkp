@@ -6,7 +6,7 @@ cache = false
 kind = "commands"
 commands = [["bash", ".ci/verify.sh"]]
 cache_tools = [["rustc", "-vV"], ["cargo", "--version"], ["wasm-pack", "--version"], ["node", "--version"], ["python3", "--version"], ["rustup", "run", "nightly", "rustc", "-vV"], ["rustup", "run", "nightly", "cargo", "llvm-cov", "--version"]]
-cache_env = ["CZKP_FIXTURE_HEAD", "CZKP_FIXTURE_LOCK_SHA"]
+cache_env = ["CZKP_FIXTURE_HEAD", "CZKP_FIXTURE_LOCK_SHA", "BB_LIB_DIR", "BB_NATIVE_RUSTFLAGS"]
 cache_outputs = ["coverage.json", "coverage.lcov", "coverage.txt"]
 
 [checks.advisories]
