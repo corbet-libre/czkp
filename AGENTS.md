@@ -14,4 +14,4 @@ Write all code comments and documentation in English.
 
 - `cargo fmt --check`, `cargo clippy --all-targets` (no warnings),
   `cargo test` — all green before every commit. No local workstation
-  builds; use GHA, Crow as fallback.
+  builds; use Crow with the canonical Forgejo repository.

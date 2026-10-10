@@ -6,11 +6,20 @@ Survey (2026-09-30): [RustCrypto sha2](https://crates.io/crates/sha2) and [ed255
 
 Source extraction: maintained adapters from cfrm; substantive accounting policy remains in cblc. This package is not independently a complete private-account relation.
 
-The JavaScript package separately exports `/verify` and `/prove` over pinned
-Barretenberg and Noir peer dependencies. The verifier accepts public statements
+The separate JavaScript client/prover bridge exports `/verify` and `/prove` over
+Barretenberg and Noir peer dependencies. It remains available to holder consumers
+such as cwlt and is excluded from the Rust package. Its use by cblc/cvfy is
+test-only fixture generation and cross-checking; their production server path
+uses the safe Rust native adapter and isolated worker described in the
+[README](../README.md#native-verification-worker). The verifier accepts public statements
 and an application-supplied public-input encoder; the prover is holder-only and
 consumes witnesses transiently. The embedding authenticates artifact snapshots.
 No application account policy or persistent state lives in these adapters.
+
+Native fixture generation deliberately retains the historical Barretenberg 5.0.0
+and Noir 1.0.0-beta.26 graph to test existing proof compatibility. Those test
+versions do not pin the Rust production manifest, which uses the compatible
+maintained SDK range and authenticates its matching native library at build time.
 
 Optional `schema` derives the existing `ProofScope` wire schema with Utoipa,
 matching Door's owner-type registry. This describes shape only; it grants no
