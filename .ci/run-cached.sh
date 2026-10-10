@@ -74,16 +74,12 @@ if [ "$CHECKS" = "resolve-dependencies" ]; then
   exec "$CCID_BIN" check --repo "$PWD" --check "$CHECKS"
 fi
 echo 'czkp:stage=fixture-resolve'
-# Fresh resolve of the real public accounting fixture (port of the ci.yml
-# resolve job "Resolve real public accounting fixture source once"): this
-# MUST run fresh on every job, never inside the cached verify check, because
-# upstream cblc HEAD and the resolved lock can change without altering the
-# verify cache key. Exact CI commands and flags; github URL rides the job's
-# Forgejo insteadOf rewrite, same as cargo's first-party git fetches.
+# Fetch current fixture source and retain its committed historical-suite lock.
+# npm ci below must consume that exact lock: an npm update would silently
+# replace the proof-format compatibility vector with a different SDK suite.
 rm -rf fixture-source fixture-source.tar fixture-package-lock.json fixture-source.txt
 git clone --depth 1 https://git.corbet.ch/corbet-libs/cblc.git fixture-source
 git -C fixture-source rev-parse HEAD > fixture-source.txt
-(cd fixture-source && npm update --package-lock-only --ignore-scripts --no-audit --no-fund)
 (cd fixture-source && git archive HEAD > ../fixture-source.tar)
 cp fixture-source/package-lock.json fixture-package-lock.json
 export CZKP_FIXTURE_HEAD="$(cat fixture-source.txt)"

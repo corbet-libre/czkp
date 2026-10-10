@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+exec 2>&1
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 export CARGO_TERM_COLOR="${CARGO_TERM_COLOR:-always}"
 export RUNNER_TEMP="${RUNNER_TEMP:-$(mktemp -d)}"
@@ -16,6 +17,14 @@ rustc --version
 cargo fmt --check || { cargo fmt; git diff > formatting.patch; exit 1; }
 cargo check --locked --lib --no-default-features
 cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo build --locked --all-features --bin czkp-bb-worker
+czkp_target_dir="${CARGO_TARGET_DIR:-target}"
+czkp_worker="$(realpath "$czkp_target_dir/debug/czkp-bb-worker")"
+set +e
+env -i CZKP_NATIVE_MEMORY_MIB=256 "$czkp_worker" </dev/null
+czkp_worker_status=$?
+set -e
+test "$czkp_worker_status" -eq 1
 mkdir -p fixture-source
 tar -xf fixture-source.tar -C fixture-source
 cp fixture-package-lock.json fixture-source/package-lock.json
