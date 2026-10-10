@@ -2,7 +2,7 @@
 name = "czkp"
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.95"
 description = "Shared zero-knowledge core: encoding, hashes, prove and verify, separately selectable"
 license = "LGPL-3.0-only WITH LGPL-3.0-linking-exception"
 repository = "https://git.corbet.ch/corbet-foss/czkp"
@@ -20,6 +20,8 @@ missing_docs = "warn"
 [features]
 default = []
 schema = ["dep:utoipa", "dep:schemars"]
+native = ["dep:serde_json"]
+native-worker = ["native", "dep:barretenberg-rs", "dep:rlimit"]
 
 [dependencies]
 utoipa = { version = "6", optional = true }
@@ -28,9 +30,20 @@ data-encoding = "2.9"
 ed25519-dalek = "3.0"
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.11"
+serde_json = { version = "1", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+barretenberg-rs = { version = "5", default-features = false, features = ["ffi"], optional = true }
+rlimit = { version = "0.11", optional = true }
+
+[[bin]]
+name = "czkp-bb-worker"
+path = "src/bin/bb_worker.rs"
+required-features = ["native-worker"]
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
 
 [dev-dependencies]
 serde_json = "1"
+tempfile = "3"

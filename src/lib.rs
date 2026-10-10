@@ -1,5 +1,8 @@
 //! Canonical encodings and maintained cryptographic adapters shared by accounting.
 #![allow(missing_docs)]
+#![forbid(unsafe_code)]
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+pub mod native;
 use data_encoding::BASE64URL_NOPAD;
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
