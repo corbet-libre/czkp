@@ -78,7 +78,7 @@ fn actual_worker_rejects_shape_fields_and_key_binding_without_native_crypto() {
         "srsG1":"00".repeat(czkp::native::SRS_G1_BYTES),"srsG2":"00".repeat(128),
         "proofs":[{"publicInputs":vec![[0;32]],"proof":"00".repeat(32)}]
     });
-    for case in 0..13 {
+    for case in 0..20 {
         let mut bad = request.clone();
         match case {
             0 => bad["scope"]["circuitDigest"] = serde_json::json!(vec![0; 32]),
@@ -93,7 +93,23 @@ fn actual_worker_rejects_shape_fields_and_key_binding_without_native_crypto() {
             9 => bad["proofs"][0]["proof"] = serde_json::json!("00"),
             10 => bad["verificationKey"] = serde_json::json!("00"),
             11 => bad["scope"]["verifyingKeyDigest"] = serde_json::json!(vec![0; 32]),
-            _ => bad["unexpected"] = serde_json::json!(true),
+            12 => bad["unexpected"] = serde_json::json!(true),
+            13 => bad["proofs"][0]["publicInputs"] = serde_json::json!(vec![[0; 32]; 4097]),
+            14 => {
+                bad["proofs"][0]["publicInputs"] = serde_json::json!(vec![[0; 32]; 4096]);
+                bad["proofs"] = serde_json::json!(vec![bad["proofs"][0].clone(); 9]);
+            }
+            15 => {
+                bad["proofs"][0]["proof"] = serde_json::json!("00".repeat(1024 * 1024));
+                bad["proofs"] = serde_json::json!(vec![bad["proofs"][0].clone(); 5]);
+            }
+            16 => {
+                bad["proofs"][0]["proof"] =
+                    serde_json::json!("00".repeat(czkp::native::MAX_PROOF_BYTES + 32))
+            }
+            17 => bad["verificationKey"] = serde_json::json!(""),
+            18 => bad["srsG1"] = serde_json::json!("zz".repeat(czkp::native::SRS_G1_BYTES)),
+            _ => bad["srsG2"] = serde_json::json!("zz".repeat(128)),
         }
         refused(&serde_json::to_vec(&bad).unwrap(), Some("256"));
     }
