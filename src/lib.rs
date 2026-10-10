@@ -16,7 +16,10 @@ pub struct ProofScope {
 }
 pub const MAX_INTEGER: u64 = 9_007_199_254_740_991;
 
-/// Original public record codecs and signature binding, not verified proof authority.
+/// Maintained Poseidon2 with original canonical cross-runtime encodings.
+pub mod poseidon;
+
+/// Original record codecs and signature binding, not verified proof authority.
 pub mod record;
 
 pub fn scope(value: &str) -> bool {

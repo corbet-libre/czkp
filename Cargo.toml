@@ -24,6 +24,10 @@ native = ["dep:serde_json"]
 native-worker = ["native", "dep:barretenberg-rs", "dep:rlimit"]
 
 [dependencies]
+ark-bn254 = "0.6"
+ark-ff = "0.6"
+pso-poseidon = "0.5"
+rs_merkle = "1.5"
 utoipa = { version = "6", optional = true }
 schemars = { version = "1", optional = true }
 data-encoding = "2.9"

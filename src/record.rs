@@ -1,4 +1,4 @@
-//! Original public R2 epoch descriptor, issuer certificate and presentation codecs.
+//! Original R2 epoch, private witness, issuer certificate and presentation codecs.
 //! Encoding, signature and binding checks grant no membership, currentness or
 //! verified proof capability. The relying owner must authenticate the current
 //! descriptor, verify the cached proof and atomically consume its fresh challenge.
@@ -123,6 +123,83 @@ impl Epoch {
     pub fn depth(&self) -> u32 {
         (u32::BITS - self.leaf_count.saturating_sub(1).leading_zeros()).max(1)
     }
+}
+
+/// Private input held by the issuer while freezing the actual durable frontier
+/// and inside Wallet after HPKE decryption. No Debug or public-value projection.
+/// Supplying this value does not establish inclusion or accepted local state.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Leaf {
+    pub owner: [u8; 32],
+    pub version: u64,
+    pub state: [u8; 32],
+    pub required_inbox: [u8; 32],
+    pub blinding: [u8; 32],
+}
+
+impl Leaf {
+    /// Fixed transcript consumed by the original record epoch circuit.
+    /// The maintained Poseidon2 implementation performs all hashing.
+    pub fn commitment(&self, community: &[u8; 32], epoch: u64) -> Result<[u8; 32], Error> {
+        if epoch == 0
+            || epoch > MAX_INTEGER
+            || self.version > MAX_INTEGER
+            || self.blinding == [0; 32]
+        {
+            return Err(Error::InvalidInput);
+        }
+        crate::field(&self.state, true)?;
+        use crate::poseidon::{hash, integer, limbs};
+        let mut inputs = vec![epoch_domain(), integer(1)];
+        inputs.extend(limbs(community));
+        inputs.push(integer(epoch));
+        inputs.extend(limbs(&self.owner));
+        inputs.push(integer(self.version));
+        inputs.push(self.state);
+        inputs.extend(limbs(&self.required_inbox));
+        inputs.extend(limbs(&self.blinding));
+        hash(&inputs)
+    }
+}
+
+fn epoch_domain() -> [u8; 32] {
+    let mut domain = [0; 32];
+    let text = b"cblc.record-epoch.v2";
+    domain[32 - text.len()..].copy_from_slice(text);
+    domain
+}
+
+/// Poseidon2 adapter for the existing maintained Merkle tree library. Only
+/// internal nodes (two bytes32 children) are hashed; leaves are already blinded.
+#[derive(Clone)]
+pub struct EpochTree;
+impl rs_merkle::Hasher for EpochTree {
+    type Hash = [u8; 32];
+    fn hash(data: &[u8]) -> Self::Hash {
+        use crate::poseidon::{hash, integer, limbs};
+        // rs_merkle combines exactly two fixed-width child hashes.
+        assert_eq!(data.len(), 64);
+        let mut inputs = vec![epoch_domain(), integer(2)];
+        for child in data.chunks_exact(32) {
+            let mut bytes = [0; 32];
+            bytes.copy_from_slice(child);
+            inputs.extend(limbs(&bytes));
+        }
+        hash(&inputs).expect("domain and 128-bit limbs are canonical fields")
+    }
+}
+
+/// Same private packet shape for frozen and necessarily descended frontiers.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SignedLeaf {
+    /// Private opening of the public blinded leaf.
+    pub leaf: Leaf,
+    /// Standard Ed25519 signature on community, epoch and the blinded leaf.
+    pub signature: Vec<u8>,
 }
 
 /// Domain-separated issuer statement for both frozen and descendant leaves.

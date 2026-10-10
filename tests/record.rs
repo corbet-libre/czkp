@@ -1,6 +1,6 @@
 //! Original public record descriptor, issuer signatures and presentation binding.
 
-use czkp::record::{Epoch, MAX_DOWNLOAD_BYTES, Purpose};
+use czkp::record::{Epoch, Leaf, MAX_DOWNLOAD_BYTES, Purpose};
 use czkp::{Error, MAX_INTEGER};
 
 fn epoch() -> Epoch {
@@ -74,6 +74,90 @@ fn configured_epoch_and_transport_refusals() {
     let mut wire = serde_json::to_value(good).unwrap();
     wire["purpose"] = serde_json::json!("cblc.record-epoch.v0");
     assert!(serde_json::from_value::<Epoch>(wire).is_err());
+}
+
+fn leaf() -> Leaf {
+    let mut state = [0; 32];
+    state[31] = 5;
+    Leaf {
+        owner: [3; 32],
+        version: 4,
+        state,
+        required_inbox: [6; 32],
+        blinding: [7; 32],
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn fixed_leaf_transcript_and_epoch_blinding() {
+    // Library-level domain/injectivity refusals only. Actual frozen issuer and
+    // Noir/BB proof interoperability require their separate qualification.
+    let expected = leaf().commitment(&[1; 32], 2).unwrap();
+    czkp::field(&expected, true).unwrap();
+    for case in 0..5 {
+        let mut changed = leaf();
+        match case {
+            0 => changed.owner[0] ^= 1,
+            1 => changed.version += 1,
+            2 => changed.state[31] += 1,
+            3 => changed.required_inbox[0] ^= 1,
+            4 => changed.blinding[0] ^= 1,
+            _ => unreachable!(),
+        }
+        assert_ne!(changed.commitment(&[1; 32], 2).unwrap(), expected);
+    }
+    assert_ne!(leaf().commitment(&[2; 32], 2).unwrap(), expected);
+    assert_ne!(leaf().commitment(&[1; 32], 3).unwrap(), expected);
+    for bad_epoch in [0, MAX_INTEGER + 1] {
+        assert_eq!(
+            leaf().commitment(&[1; 32], bad_epoch),
+            Err(Error::InvalidInput)
+        );
+    }
+    for case in 0..4 {
+        let mut bad = leaf();
+        match case {
+            0 => bad.version = MAX_INTEGER + 1,
+            1 => bad.blinding = [0; 32],
+            2 => bad.state = [0; 32],
+            3 => bad.state = [0xff; 32],
+            _ => unreachable!(),
+        }
+        assert_eq!(bad.commitment(&[1; 32], 2), Err(Error::InvalidInput));
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn maintained_epoch_tree_verifies_padded_paths_and_refuses_substitution() {
+    use czkp::record::EpochTree;
+    use rs_merkle::MerkleTree;
+    let mut leaves = (0..3)
+        .map(|index| {
+            let mut value = leaf();
+            value.owner = [3 + index; 32];
+            value.commitment(&[1; 32], 2).unwrap()
+        })
+        .collect::<Vec<_>>();
+    // The original common-object builder pads to a power of two, at least two.
+    leaves.push([0; 32]);
+    let tree = MerkleTree::<EpochTree>::from_leaves(&leaves);
+    let root = tree.root().unwrap();
+    czkp::field(&root, true).unwrap();
+    let proof = tree.proof(&[2]);
+    assert_eq!(proof.proof_hashes().len(), 2);
+    assert!(proof.verify(root, &[2], &[leaves[2]], 4));
+    assert!(!proof.verify(root, &[0], &[leaves[2]], 4));
+    assert!(!proof.verify(root, &[2], &[leaves[1]], 4));
+    let mut changed_root = root;
+    changed_root[31] ^= 1;
+    assert!(!proof.verify(changed_root, &[2], &[leaves[2]], 4));
+    assert_eq!(
+        czkp::poseidon::hash(&[[0xff; 32]]),
+        Err(Error::InvalidInput)
+    );
+    // Inclusion in a locally built tree is not authenticated epoch authority.
 }
 
 const PERIOD: u64 = 86_400;
