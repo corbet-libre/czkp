@@ -17,17 +17,14 @@ let
   '';
 in pkgs.mkShell {
   buildInputs = with pkgs; [
-    llvmPackages.libclang.lib
     llvmPackages.libcxx
   ];
   nativeBuildInputs = with pkgs; [
     pkg-config
     clang
-    llvmPackages.libclang
   ];
-  LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
   BB_LIB_DIR = "${bbLibrary}/lib";
   shellHook = ''
-    export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [ pkgs.llvmPackages.libclang.lib pkgs.llvmPackages.libcxx ]}:''${LD_LIBRARY_PATH:-}";
+    export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [ pkgs.llvmPackages.libcxx ]}:''${LD_LIBRARY_PATH:-}";
   '';
 }

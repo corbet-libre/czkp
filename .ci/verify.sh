@@ -5,6 +5,8 @@ export CARGO_TERM_COLOR="${CARGO_TERM_COLOR:-always}"
 export RUNNER_TEMP="${RUNNER_TEMP:-$(mktemp -d)}"
 export GITHUB_PATH="${GITHUB_PATH:-$RUNNER_TEMP/github_path}"
 touch "$GITHUB_PATH"
+python3 -B .ci/test-native-sdk.py
+python3 -B .ci/check-native-sdk.py
 
 # dependency-policy gate (ci.yml dependency-policy job).
 python3 .github/check-first-party.py
@@ -12,9 +14,18 @@ python3 .github/check-first-party.py
 # intentionally not preserved: verify runs against the committed snapshot.
 rustc --version
 cargo fmt --check || { cargo fmt; git diff > formatting.patch; exit 1; }
+cargo check --locked --lib --no-default-features
 cargo clippy --locked --all-targets --all-features -- -D warnings
+mkdir -p fixture-source
+tar -xf fixture-source.tar -C fixture-source
+cp fixture-package-lock.json fixture-source/package-lock.json
+npm ci --ignore-scripts --no-audit --no-fund --prefix fixture-source
+(cd fixture-source && node .ci/check-fixture-suite.ts && node tests/real-proof.mjs && node .ci/native-fixture-inputs.ts)
+export CZKP_FIXTURE_SOURCE="$PWD/fixture-source"
 cargo test --locked --all-features
-wasm-pack test --node --all-features
+# Native process/FFI features cannot execute in Wasm. Keep every portable core
+# vector on the actual Wasm target; native worker vectors execute above.
+wasm-pack test --node --features schema
 node --test tests/abi.test.mjs
 
 # coverage gate (ci.yml coverage job, nightly branch instrumentation).
