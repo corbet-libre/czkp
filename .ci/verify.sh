@@ -30,7 +30,8 @@ mkdir -p fixture-source
 tar -xf fixture-source.tar -C fixture-source
 cp fixture-package-lock.json fixture-source/package-lock.json
 npm ci --ignore-scripts --no-audit --no-fund --prefix fixture-source
-(cd fixture-source && node .ci/check-fixture-suite.ts && node tests/real-proof.mjs && node .ci/native-fixture-inputs.ts)
+node .ci/check-fixture-suite.ts fixture-source
+(cd fixture-source && node tests/real-proof.mjs && node .ci/native-fixture-inputs.ts)
 export CZKP_FIXTURE_SOURCE="$PWD/fixture-source"
 cargo test --locked --all-features
 # Native process/FFI features cannot execute in Wasm. Keep every portable core
