@@ -16,10 +16,10 @@ and an application-supplied public-input encoder; the prover is holder-only and
 consumes witnesses transiently. The embedding authenticates artifact snapshots.
 No application account policy or persistent state lives in these adapters.
 
-Native fixture generation deliberately retains the historical Barretenberg 5.0.0
-and Noir 1.0.0-beta.26 graph to test existing proof compatibility. Those test
-versions do not pin the Rust production manifest, which uses the compatible
-maintained SDK range and authenticates its matching native library at build time.
+There is one prover version across server, wallet and browser: Barretenberg 5.2.1
+with Noir 1.0.0-beta.26. Fixture generation, the Rust production manifest (which
+authenticates its matching native library at build time) and the JS packages'
+peer ranges all name it; the retired 5.0.0 key group is refused everywhere.
 
 Optional `schema` derives the existing `ProofScope` wire schema with Utoipa,
 matching Door's owner-type registry. This describes shape only; it grants no

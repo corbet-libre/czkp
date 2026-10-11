@@ -13,6 +13,13 @@ cache_outputs = ["coverage.json", "coverage.lcov", "coverage.txt"]
 kind = "commands"
 commands = [["cargo", "deny", "--locked", "check", "advisories", "licenses"]]
 
+# Maintenance job: resolves and retains an npm lock without claiming validation.
+[checks.resolve-npm]
+kind = "commands"
+commands = [["bash", ".ci/resolve-npm.sh"]]
+cache = false
+cache_outputs = ["package-lock.json"]
+
 [render]
 tool_revision = "e38f347d6941aa105ac4b55a0d4b8fec2ef22433"
 
@@ -31,5 +38,11 @@ cache_outputs = ["Cargo.lock"]
 [jobs.resolve-dependencies]
 scheduler = "crow"
 checks = ["resolve-dependencies"]
+workflow = "repository-jobs"
+command = ["bash", ".ci/run-cached.sh"]
+
+[jobs.resolve-npm]
+scheduler = "crow"
+checks = ["resolve-npm"]
 workflow = "repository-jobs"
 command = ["bash", ".ci/run-cached.sh"]
