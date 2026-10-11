@@ -1,7 +1,7 @@
 //! Reusable public epoch statement and maintained Ed25519 presentation binding.
 //! A successful binding check is not proof verification or currentness authority.
 use super::Epoch;
-use crate::{Error, MAX_INTEGER};
+use crate::Error;
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
@@ -50,7 +50,6 @@ impl Record {
         self.epoch.validate(&self.epoch.community, period)?;
         if self.epoch.community == [0; 32]
             || self.epoch.policy_epoch == 0
-            || self.epoch.leaf_count > super::MAX_LEAVES
             || self.owner == [0; 32]
             || self.presentation_key == [0; 32]
             || self.blinded_leaf == [0; 32]
@@ -71,8 +70,8 @@ impl Record {
         let e = &self.epoch;
         if context.challenge == [0; 32]
             || context.expires_at <= e.starts_at
+            // Epoch::validate bounds e.expires_at by MAX_INTEGER, so this bounds both.
             || context.expires_at > e.expires_at
-            || context.expires_at > MAX_INTEGER
         {
             return Err(Error::InvalidInput);
         }
