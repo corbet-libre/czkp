@@ -120,3 +120,18 @@ fn every_acceptance_field_and_the_key_are_bound() {
     // Small-order keys are refused by strict verification.
     assert!(verify_acceptance(&message(150, &statement()), &[0; 32], &signature).is_err());
 }
+
+#[test]
+fn an_operator_key_that_is_not_a_curve_point_is_refused() {
+    let signature: [u8; 64] = hex(GOLDEN_SIGNATURE).try_into().unwrap();
+    let invalid = (0..=255u8)
+        .map(|b| [b; 32])
+        .chain((0..=255u8).map(|b| {
+            let mut key = [0xFF; 32];
+            key[0] = b;
+            key
+        }))
+        .find(|key| VerifyingKey::from_bytes(key).is_err())
+        .expect("some 32-byte pattern is not a valid Ed25519 point");
+    assert!(verify_acceptance(&message(150, &statement()), &invalid, &signature).is_err());
+}

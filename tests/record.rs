@@ -543,3 +543,54 @@ fn presentation_framing_refuses_malformed_proofs_and_invalid_metadata() {
     wire["current"] = serde_json::json!(true);
     assert!(serde_json::from_value::<czkp::record::Presentation>(wire).is_err());
 }
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn record_validation_and_context_bounds_refuse_every_malformed_field() {
+    use czkp::record::{Context, Record, Use};
+    let valid = || Record {
+        epoch: epoch(),
+        owner: [9; 32],
+        presentation_key: [7; 32],
+        blinded_leaf: [1; 32],
+        certificate: vec![0; 64],
+        shares: Some([5000, 3000, 2000]),
+    };
+    valid().validate().unwrap();
+    let mut backwards = valid();
+    backwards.epoch.expires_at = backwards.epoch.starts_at - 1;
+    assert_eq!(backwards.validate(), Err(Error::InvalidInput));
+    let mut invalid_epoch = valid();
+    invalid_epoch.epoch.leaf_count = 0;
+    assert!(invalid_epoch.validate().is_err());
+    for case in 0..8 {
+        let mut bad = valid();
+        match case {
+            0 => bad.epoch.community = [0; 32],
+            1 => bad.epoch.policy_epoch = 0,
+            2 => bad.epoch.leaf_count = u64::MAX,
+            3 => bad.owner = [0; 32],
+            4 => bad.presentation_key = [0; 32],
+            5 => bad.blinded_leaf = [0; 32],
+            6 => bad.certificate = vec![0; 63],
+            _ => bad.shares = Some([1, 2, 3]),
+        }
+        assert!(bad.validate().is_err(), "case {case}");
+    }
+    let context = |challenge: [u8; 32], expires_at: u64| Context {
+        purpose: Use::ForumListing,
+        challenge,
+        expires_at,
+    };
+    valid()
+        .presentation_bytes(&context([8; 32], 173_000))
+        .unwrap();
+    for bad in [
+        context([0; 32], 173_000),
+        context([8; 32], valid().epoch.starts_at),
+        context([8; 32], valid().epoch.expires_at + 1),
+        context([8; 32], MAX_INTEGER + 1),
+    ] {
+        assert_eq!(valid().presentation_bytes(&bad), Err(Error::InvalidInput));
+    }
+}
