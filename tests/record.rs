@@ -568,7 +568,7 @@ fn record_validation_and_context_bounds_refuse_every_malformed_field() {
         match case {
             0 => bad.epoch.community = [0; 32],
             1 => bad.epoch.policy_epoch = 0,
-            2 => bad.epoch.leaf_count = u64::MAX,
+            2 => bad.epoch.leaf_count = u32::MAX,
             3 => bad.owner = [0; 32],
             4 => bad.presentation_key = [0; 32],
             5 => bad.blinded_leaf = [0; 32],
