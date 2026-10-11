@@ -19,6 +19,12 @@ pub const MAX_INTEGER: u64 = 9_007_199_254_740_991;
 /// Maintained Poseidon2 with original canonical cross-runtime encodings.
 pub mod poseidon;
 
+/// Canonical account statement and operator-acceptance transcripts and verification.
+pub mod account;
+
+/// Canonical accepted-state and epoch-ancestry certificate transcripts and verification.
+pub mod certificate;
+
 /// Original compact signing transcripts using maintained Poseidon2, not proof authority.
 pub mod compact;
 
