@@ -142,7 +142,7 @@ impl Presentation {
         }
         if self.proof.is_empty()
             || self.proof.len() > 8 * 1024 * 1024
-            || self.proof.len() % 2 != 0
+            || !self.proof.len().is_multiple_of(2)
             || !self.proof.bytes().all(|b| b.is_ascii_hexdigit())
         {
             return Err(Error::InvalidInput);

@@ -182,10 +182,9 @@ impl rs_merkle::Hasher for EpochTree {
         // rs_merkle combines exactly two fixed-width child hashes.
         assert_eq!(data.len(), 64);
         let mut inputs = vec![epoch_domain(), integer(2)];
-        for child in data.chunks_exact(32) {
-            let mut bytes = [0; 32];
-            bytes.copy_from_slice(child);
-            inputs.extend(limbs(&bytes));
+        let (children, _) = data.as_chunks::<32>();
+        for child in children {
+            inputs.extend(limbs(child));
         }
         hash(&inputs).expect("domain and 128-bit limbs are canonical fields")
     }
