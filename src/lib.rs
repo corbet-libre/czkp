@@ -28,6 +28,9 @@ pub mod certificate;
 /// Original compact signing transcripts using maintained Poseidon2, not proof authority.
 pub mod compact;
 
+/// Standing v5: deterministic policy tables, digest and integer state transitions.
+pub mod standing;
+
 /// Original record codecs and signature binding, not verified proof authority.
 pub mod record;
 
