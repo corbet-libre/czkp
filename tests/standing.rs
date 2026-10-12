@@ -160,3 +160,19 @@ fn behavior_properties() {
     }
     assert_eq!(worst.cap(&p), 1);
 }
+
+/// Pinned against the Noir circuit (cblc tests/standing-probe.mts, same value): the policy
+/// digest of the default parameters under the account-state domain.
+#[test]
+fn default_digest_equals_the_noir_digest() {
+    let mut domain = [0u8; 32];
+    let tag = b"cfrm.account-state.v2";
+    domain[32 - tag.len()..].copy_from_slice(tag);
+    let digest = Policy::derive(Params::default())
+        .unwrap()
+        .digest(&domain)
+        .unwrap();
+    let expected = "2ef15bfbf6246793c45fafb51762ab9ed4d891ecb67ba2d0ca4e0d6d23f98eb2";
+    let got: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(got, expected);
+}
