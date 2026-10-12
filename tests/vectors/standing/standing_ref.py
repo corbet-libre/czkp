@@ -228,11 +228,14 @@ SCRIPTS = {
     "sociable": [["recv", 0], ["give", 0]] * 12 + [["day", 20], ["punish_given", 0], ["recv", 0]],
     "violator_veteran": [["recv", 0]] * 20 + [["day", 70], ["punished", 1], ["punished", 0],
                                               ["punished", 0], ["recv", 0], ["day", 140]],
+    "established": [["day", 0], ["recv", 0], ["punished", 1], ["punished", 1], ["punished", 0],
+                    ["credit", 32768]],
     "absent_returns": [["punished", 0], ["punished", 0], ["day", 730], ["recv", 0]],
 }
 PARAM_SETS = {
     "default": {},
     "fast": dict(n_half=10, h_G=7, h_A=7, slope_q=2 * Q, mid_q=Q, kappa_q=3 * Q),
+    "noboost": dict(boost_q=0),
     "slow": dict(n_half=50, h_G=28, h_A=28, c_max_q=0, loan_use_q=Q // 8),
 }
 

@@ -136,11 +136,6 @@ fn digest_binds_every_parameter_and_table_entry() {
     let mut tampered = base.clone();
     tampered.a_table[3] += 1;
     assert_ne!(digest, tampered.digest(&domain).unwrap());
-    println!("standing digest (domain 0x07*32): {}", hex(&digest));
-}
-
-fn hex(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
 #[test]

@@ -89,23 +89,26 @@ impl Params {
     /// Safe ranges every community setting must stay inside.
     pub fn validate(&self) -> Result<(), Error> {
         let ok = |v: u64, lo: u64, hi: u64| (lo..=hi).contains(&v);
-        let good = ok(self.c0, 1, 16)
-            && ok(self.h_a, 1, 64)
-            && ok(self.h_g, 1, 64)
-            && ok(self.n_half, 5, 200)
-            && ok(self.n_c, 10, 200)
-            && ok(self.e_q, 0, Q)
-            && ok(self.r_max, 1, 200)
-            && ok(self.r_age, 0, 16)
-            && ok(self.c_max_q, 0, 58_982)
-            && ok(self.c_vet, 1, 200)
-            && ok(self.age_vet, 1, 365)
-            && ok(self.boost_q, 0, 2 * Q)
-            && ok(self.boost_days, 0, 90)
-            && ok(self.slope_q, Q, 8 * Q)
-            && ok(self.mid_q, Q / 4, 3 * Q)
-            && ok(self.kappa_q, Q / 2, 6 * Q)
-            && ok(self.loan_use_q, 1, Q);
+        let checks = [
+            ok(self.c0, 1, 16),
+            ok(self.h_a, 1, 64),
+            ok(self.h_g, 1, 64),
+            ok(self.n_half, 5, 200),
+            ok(self.n_c, 10, 200),
+            ok(self.e_q, 0, Q),
+            ok(self.r_max, 1, 200),
+            ok(self.r_age, 0, 16),
+            ok(self.c_max_q, 0, 58_982),
+            ok(self.c_vet, 1, 200),
+            ok(self.age_vet, 1, 365),
+            ok(self.boost_q, 0, 2 * Q),
+            ok(self.boost_days, 0, 90),
+            ok(self.slope_q, Q, 8 * Q),
+            ok(self.mid_q, Q / 4, 3 * Q),
+            ok(self.kappa_q, Q / 2, 6 * Q),
+            ok(self.loan_use_q, 1, Q),
+        ];
+        let good = checks.iter().all(|c| *c);
         if good {
             Ok(())
         } else {
@@ -117,9 +120,8 @@ impl Params {
 /// e^(-x) for a Q60 argument, returned in Q60.
 fn exp_neg(x: u128) -> u128 {
     let (n, r) = (x / LN2, x % LN2);
-    if n >= 100 {
-        return 0;
-    }
+    // The largest valid argument is 64 (slope 8 times 8), so n stays below 100 and the
+    // shift below is always defined.
     let (mut sum, mut term) = (ONE, ONE);
     for k in 1..=40u128 {
         term = ((term * r) >> 60) / k;
@@ -252,7 +254,7 @@ pub struct State {
 }
 
 fn decay(x: u64, days: u64, h: u64, table: &[u64; TABLE_PAD]) -> u64 {
-    if days == 0 || x == 0 {
+    if x == 0 {
         return x;
     }
     let (qd, r) = (days / h, days % h);
