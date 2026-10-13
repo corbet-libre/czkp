@@ -1,9 +1,10 @@
 //! Voucher accounting: limit, success proof, weights and the obligation addresses.
-use czkp::standing::{Params, Policy, Q, State};
+mod common;
+use czkp::standing::{Policy, Q, State};
 use czkp::voucher::{self, ADMIN, Account, MEMBER, PUNISHED, REWARD, ROOT, SUCCESS};
 
 fn policy() -> Policy {
-    Policy::derive(Params::default()).unwrap()
+    Policy::derive(common::reference()).unwrap()
 }
 
 fn domain() -> [u8; 32] {
@@ -19,7 +20,7 @@ fn newcomers_have_no_allowance_until_their_own_success() {
     let mut a = Account::default();
     assert_eq!(voucher::limit(&p, MEMBER, &a, 40).unwrap(), 0);
     a.proven = 20_000;
-    // slope 1/8: cap 40 gives 5, clamped to the member maximum of 3.
+    // slope 1/10: cap 40 gives 4, clamped to the member maximum of 3.
     assert_eq!(voucher::limit(&p, MEMBER, &a, 40).unwrap(), 3);
     assert_eq!(voucher::limit(&p, MEMBER, &a, 3).unwrap(), 1);
     assert_eq!(voucher::limit(&p, MEMBER, &a, 1).unwrap(), 1);
@@ -30,9 +31,9 @@ fn roles_clamp_independently_and_unknown_roles_refuse() {
     let p = policy();
     let a = Account::default();
     assert_eq!(voucher::limit(&p, ADMIN, &a, 3).unwrap(), 50);
-    assert_eq!(voucher::limit(&p, ADMIN, &a, 41).unwrap(), 50);
+    assert_eq!(voucher::limit(&p, ADMIN, &a, 41).unwrap(), 82);
     assert_eq!(voucher::limit(&p, ADMIN, &a, 200).unwrap(), 100);
-    assert_eq!(voucher::limit(&p, ROOT, &a, 3).unwrap(), 1000);
+    assert_eq!(voucher::limit(&p, ROOT, &a, 3).unwrap(), 500);
     assert!(voucher::limit(&p, 3, &a, 3).is_err());
 }
 
@@ -123,7 +124,7 @@ fn reward_is_capped_and_never_lowers_a_larger_bonus() {
     assert_eq!(voucher::rewarded(&p, 1), 2);
     assert_eq!(voucher::rewarded(&p, 2), 2);
     assert_eq!(voucher::rewarded(&p, 5), 5);
-    let mut off = Params::default();
+    let mut off = common::reference();
     off.voucher.reward_cap = 0;
     assert_eq!(voucher::rewarded(&Policy::derive(off).unwrap(), 0), 0);
 }
@@ -184,20 +185,20 @@ fn addresses_are_domain_separated_and_deterministic() {
 
 #[test]
 fn parameters_validate_and_change_the_digest() {
-    let mut p = Params::default();
+    let mut p = common::reference();
     p.voucher.days = 13;
     assert!(Policy::derive(p).is_err(), "below the platform floor");
-    p = Params::default();
+    p = common::reference();
     p.voucher.min[0] = 4;
     assert!(Policy::derive(p).is_err(), "min above max");
-    p = Params::default();
+    p = common::reference();
     p.voucher.brake_cap = 0;
     assert!(Policy::derive(p).is_err());
-    let base = Policy::derive(Params::default())
+    let base = Policy::derive(common::reference())
         .unwrap()
         .digest(&domain())
         .unwrap();
-    let mut changed = Params::default();
+    let mut changed = common::reference();
     changed.voucher.k = 4;
     let moved = Policy::derive(changed).unwrap().digest(&domain()).unwrap();
     assert_ne!(base, moved);
