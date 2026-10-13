@@ -84,6 +84,7 @@ fn leaf() -> Leaf {
         version: 4,
         state,
         required_inbox: [6; 32],
+        role: 0,
         blinding: [7; 32],
     }
 }
@@ -95,7 +96,7 @@ fn fixed_leaf_transcript_and_epoch_blinding() {
     // Noir/BB proof interoperability require their separate qualification.
     let expected = leaf().commitment(&[1; 32], 2).unwrap();
     czkp::field(&expected, true).unwrap();
-    for case in 0..5 {
+    for case in 0..6 {
         let mut changed = leaf();
         match case {
             0 => changed.owner[0] ^= 1,
@@ -103,6 +104,7 @@ fn fixed_leaf_transcript_and_epoch_blinding() {
             2 => changed.state[31] += 1,
             3 => changed.required_inbox[0] ^= 1,
             4 => changed.blinding[0] ^= 1,
+            5 => changed.role = 1,
             _ => unreachable!(),
         }
         assert_ne!(changed.commitment(&[1; 32], 2).unwrap(), expected);

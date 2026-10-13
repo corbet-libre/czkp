@@ -31,6 +31,9 @@ pub mod compact;
 /// Standing v5: deterministic policy tables, digest and integer state transitions.
 pub mod standing;
 
+/// Voucher accounting: allowance, success proof and bond-addressed obligations.
+pub mod voucher;
+
 /// Original record codecs and signature binding, not verified proof authority.
 pub mod record;
 

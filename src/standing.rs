@@ -20,7 +20,7 @@ const ONE: u128 = 1 << 60;
 /// round(ln 2 * 2^60).
 const LN2: u128 = 799_144_290_325_165_979;
 /// Field-list tag of the standing policy digest.
-const TAG: u64 = 41;
+const TAG: u64 = 42;
 
 /// Tunable community parameters (rulebook-signed).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,6 +59,84 @@ pub struct Params {
     pub kappa_q: u64,
     /// Starter loan used per unanswered wave (Q16), a signed epoch input.
     pub loan_use_q: u64,
+    /// Voucher allowance, success proof and reward parameters.
+    pub voucher: VoucherParams,
+}
+
+/// Number of roles with their own allowance clamp: member, admin, root.
+pub const ROLES: usize = 3;
+/// Platform floor of the success waiting period in days.
+pub const SUCCESS_DAYS_FLOOR: u64 = 14;
+/// Number of voucher fields in the policy digest.
+pub const VOUCHER_FIELDS: usize = 3 * ROLES + 5;
+
+/// Voucher parameters (rulebook-signed, part of the standing policy digest).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VoucherParams {
+    /// Allowance per unit of pool cap and role (Q16).
+    pub slope_q: [u64; ROLES],
+    /// Smallest allowance per role.
+    pub min: [u64; ROLES],
+    /// Largest allowance per role.
+    pub max: [u64; ROLES],
+    /// Days since joining before the vouchee may prove success.
+    pub days: u64,
+    /// Answered conversations with distinct earlier members that prove success.
+    pub k: u64,
+    /// Punishments received that still allow the success proof.
+    pub max_punished: u64,
+    /// A pool cap at or below this value counts as braked.
+    pub brake_cap: u64,
+    /// Largest permanent reward bonus; zero switches the reward off.
+    pub reward_cap: u64,
+}
+
+impl Default for VoucherParams {
+    fn default() -> Self {
+        VoucherParams {
+            slope_q: [Q / 8, Q, 8 * Q],
+            min: [1, 50, 1000],
+            max: [3, 100, 1000],
+            days: 30,
+            k: 3,
+            max_punished: 1,
+            brake_cap: 1,
+            reward_cap: 2,
+        }
+    }
+}
+
+impl VoucherParams {
+    fn valid(&self) -> bool {
+        let ok = |v: u64, lo: u64, hi: u64| (lo..=hi).contains(&v);
+        let mut good = ok(self.days, SUCCESS_DAYS_FLOOR, 365)
+            & ok(self.k, 1, 20)
+            & ok(self.max_punished, 0, 8)
+            & ok(self.brake_cap, 1, 4)
+            & ok(self.reward_cap, 0, 16);
+        for r in 0..ROLES {
+            good &= ok(self.slope_q[r], 0, 64 * Q)
+                & ok(self.max[r], 1, 100_000)
+                & (self.min[r] <= self.max[r]);
+        }
+        good
+    }
+
+    /// The fields in digest order.
+    fn fields(&self) -> Vec<u64> {
+        let mut out = Vec::with_capacity(VOUCHER_FIELDS);
+        out.extend_from_slice(&self.slope_q);
+        out.extend_from_slice(&self.min);
+        out.extend_from_slice(&self.max);
+        out.extend_from_slice(&[
+            self.days,
+            self.k,
+            self.max_punished,
+            self.brake_cap,
+            self.reward_cap,
+        ]);
+        out
+    }
 }
 
 impl Default for Params {
@@ -81,6 +159,7 @@ impl Default for Params {
             mid_q: 49_152,
             kappa_q: 2 * Q,
             loan_use_q: Q / 4,
+            voucher: VoucherParams::default(),
         }
     }
 }
@@ -107,6 +186,7 @@ impl Params {
             ok(self.mid_q, Q / 4, 3 * Q),
             ok(self.kappa_q, Q / 2, 6 * Q),
             ok(self.loan_use_q, 1, Q),
+            self.voucher.valid(),
         ];
         let good = checks.iter().all(|c| *c);
         if good {
@@ -218,6 +298,7 @@ impl Policy {
             p.loan_use_q,
             self.factor,
         ];
+        out.extend(p.voucher.fields());
         out.extend_from_slice(&self.trust);
         out.extend_from_slice(&self.g_table);
         out.extend_from_slice(&self.a_table);

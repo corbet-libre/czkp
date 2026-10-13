@@ -34,6 +34,7 @@ fn params(v: &Value) -> Params {
         mid_q: u(&v["mid_q"]),
         kappa_q: u(&v["kappa_q"]),
         loan_use_q: u(&v["loan_use_q"]),
+        voucher: Default::default(),
     }
 }
 
@@ -65,7 +66,11 @@ fn tables_and_scripts_match_the_oracle() {
         assert_eq!(policy.trust.to_vec(), list(&set["trust"]), "{name} trust");
         assert_eq!(policy.g_table.to_vec(), list(&set["g_table"]), "{name} g");
         assert_eq!(policy.a_table.to_vec(), list(&set["a_table"]), "{name} a");
-        assert_eq!(policy.fields().len(), u(&set["fields_len"]) as usize);
+        // The oracle predates the voucher parameters, which follow the 18 head fields.
+        assert_eq!(
+            policy.fields().len(),
+            u(&set["fields_len"]) as usize + czkp::standing::VOUCHER_FIELDS
+        );
         for (script, steps) in set["scripts"].as_object().unwrap() {
             let mut st = State::new(0, u(&set["a0_q"]));
             for step in steps.as_array().unwrap() {
@@ -172,7 +177,7 @@ fn default_digest_equals_the_noir_digest() {
         .unwrap()
         .digest(&domain)
         .unwrap();
-    let expected = "2ef15bfbf6246793c45fafb51762ab9ed4d891ecb67ba2d0ca4e0d6d23f98eb2";
+    let expected = "2a69ec139a3bef6718bbc299558584ca4ab0726946cb474cefe4abe3842003eb";
     let got: String = digest.iter().map(|b| format!("{b:02x}")).collect();
     assert_eq!(got, expected);
 }

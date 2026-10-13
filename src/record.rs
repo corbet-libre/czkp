@@ -136,6 +136,9 @@ pub struct Leaf {
     pub version: u64,
     pub state: [u8; 32],
     pub required_inbox: [u8; 32],
+    /// Role class (member, admin, root) attested by the issuer for this epoch.
+    #[serde(default)]
+    pub role: u8,
     pub blinding: [u8; 32],
 }
 
@@ -152,13 +155,14 @@ impl Leaf {
         }
         crate::field(&self.state, true)?;
         use crate::poseidon::{hash, integer, limbs};
-        let mut inputs = vec![epoch_domain(), integer(1)];
+        let mut inputs = vec![epoch_domain(), integer(2)];
         inputs.extend(limbs(community));
         inputs.push(integer(epoch));
         inputs.extend(limbs(&self.owner));
         inputs.push(integer(self.version));
         inputs.push(self.state);
         inputs.extend(limbs(&self.required_inbox));
+        inputs.push(integer(u64::from(self.role)));
         inputs.extend(limbs(&self.blinding));
         hash(&inputs)
     }
