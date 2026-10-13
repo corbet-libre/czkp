@@ -36,6 +36,8 @@ pub mod voucher;
 
 /// Original record codecs and signature binding, not verified proof authority.
 pub mod record;
+#[cfg(feature = "reference")]
+pub mod reference;
 
 pub fn scope(value: &str) -> bool {
     !value.is_empty()
