@@ -89,3 +89,13 @@ fn another_value_is_another_digest() {
     assert_ne!(digest(common::reference()), digest(changed));
     assert_eq!(digest(common::reference()), digest(common::reference()));
 }
+
+#[test]
+fn the_policy_digest_is_the_one_the_circuit_pins() {
+    let digest = common::reference().policy_digest().unwrap();
+    let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(
+        hex,
+        "13869f92e82373e15e5b9bbaf09bb0d2f4a71e7af912d20c68ae8ceb98710231"
+    );
+}

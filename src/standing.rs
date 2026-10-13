@@ -256,6 +256,15 @@ impl Params {
         Ok(params)
     }
 
+    /// The digest of these parameters and their derived tables under the account-state
+    /// domain: the value a rulebook-derived extension policy carries and the circuits bind.
+    pub fn policy_digest(&self) -> Result<[u8; 32], Error> {
+        let tag = b"cfrm.account-state.v2";
+        let mut domain = [0u8; 32];
+        domain[32 - tag.len()..].copy_from_slice(tag);
+        Policy::derive(*self)?.digest(&domain)
+    }
+
     /// Safe ranges every community setting must stay inside.
     pub fn validate(&self) -> Result<(), Error> {
         let ok = |v: u64, lo: u64, hi: u64| (lo..=hi).contains(&v);
