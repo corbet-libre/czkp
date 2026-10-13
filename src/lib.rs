@@ -36,6 +36,8 @@ pub mod voucher;
 
 /// Original record codecs and signature binding, not verified proof authority.
 pub mod record;
+#[cfg(feature = "reference")]
+pub mod reference;
 
 pub fn scope(value: &str) -> bool {
     !value.is_empty()
@@ -107,3 +109,18 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+/// The one-time owner a community-creation activation proof binds: derived from the
+/// address and the creation token's fresh random message, so a proof made for one
+/// creation is useless for any later incarnation of the same name (a new creation
+/// has a new token). The hub recomputes it from the request; the device proves it.
+pub fn activation_owner(address: &str, token_message: &[u8]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    hash.update(b"czkp.activation-owner.v1\0");
+    hash.update((address.len() as u64).to_be_bytes());
+    hash.update(address.as_bytes());
+    hash.update((token_message.len() as u64).to_be_bytes());
+    hash.update(token_message);
+    hash.finalize().into()
+}

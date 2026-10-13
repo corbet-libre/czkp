@@ -91,21 +91,6 @@ pub struct VoucherParams {
     pub reward_cap: u64,
 }
 
-impl Default for VoucherParams {
-    fn default() -> Self {
-        VoucherParams {
-            slope_q: [Q / 8, Q, 8 * Q],
-            min: [1, 50, 1000],
-            max: [3, 100, 1000],
-            days: 30,
-            k: 3,
-            max_punished: 1,
-            brake_cap: 1,
-            reward_cap: 2,
-        }
-    }
-}
-
 impl VoucherParams {
     fn valid(&self) -> bool {
         let ok = |v: u64, lo: u64, hi: u64| (lo..=hi).contains(&v);
@@ -139,32 +124,147 @@ impl VoucherParams {
     }
 }
 
-impl Default for Params {
-    fn default() -> Self {
-        Params {
-            c0: 3,
-            h_a: 14,
-            h_g: 14,
-            n_half: 25,
-            n_c: 60,
-            e_q: Q / 4,
-            r_max: 40,
-            r_age: 2,
-            c_max_q: 52_428,
-            c_vet: 30,
-            age_vet: 60,
-            boost_q: Q,
-            boost_days: 30,
-            slope_q: 4 * Q,
-            mid_q: 49_152,
-            kappa_q: 2 * Q,
-            loan_use_q: Q / 4,
-            voucher: VoucherParams::default(),
+/// One rulebook value as the settings catalogue stores it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Setting {
+    /// A whole number (integers, Q16 values, counts).
+    Integer(u64),
+    /// A decimal number; slopes are given this way and become Q16.
+    Number(f64),
+    /// A switch.
+    Flag(bool),
+}
+
+impl Setting {
+    fn whole(self) -> Result<u64, Error> {
+        match self {
+            Setting::Integer(value) => Ok(value),
+            Setting::Number(value) if value >= 0.0 && value.fract() == 0.0 && value < 1e15 => {
+                Ok(value as u64)
+            }
+            _ => Err(Error::InvalidInput),
+        }
+    }
+
+    /// Q16 fixed point, rounded to nearest (exact for every value the catalogue allows).
+    fn q16(self) -> Result<u64, Error> {
+        match self {
+            Setting::Integer(value) => value.checked_mul(Q).ok_or(Error::InvalidInput),
+            Setting::Number(value) if (0.0..=1e9).contains(&value) => {
+                Ok((value * Q as f64).round() as u64)
+            }
+            _ => Err(Error::InvalidInput),
+        }
+    }
+
+    fn flag(self) -> Result<bool, Error> {
+        match self {
+            Setting::Flag(value) => Ok(value),
+            _ => Err(Error::InvalidInput),
         }
     }
 }
 
+/// Every rulebook key `Params::from_rulebook` reads. The settings catalogue
+/// defines each one's type, default and bounds; this crate defines no defaults.
+pub const RULEBOOK_KEYS: [&str; 32] = [
+    "standing.c0",
+    "standing.h_a",
+    "standing.h_g",
+    "standing.n_half",
+    "standing.n_c",
+    "standing.e_q",
+    "standing.r_max",
+    "standing.r_age",
+    "standing.c_max_q",
+    "standing.c_vet",
+    "standing.age_vet",
+    "standing.boost_q",
+    "standing.boost_days",
+    "standing.slope_q",
+    "standing.mid_q",
+    "standing.kappa_q",
+    "standing.loan_use_q",
+    "voucher.slope.member",
+    "voucher.slope.admin",
+    "voucher.slope.root",
+    "voucher.min.member",
+    "voucher.min.admin",
+    "voucher.min.root",
+    "voucher.max.member",
+    "voucher.max.admin",
+    "voucher.max.root",
+    "voucher.success.min_days",
+    "voucher.success.min_conversations",
+    "voucher.success.max_punishments",
+    "voucher.brake_cap",
+    "voucher.reward.enabled",
+    "voucher.reward.cap",
+];
+
 impl Params {
+    /// The parameters exactly as the community's verified rulebook resolves them.
+    /// Every key must be present: a missing one is an error, never a default, so a
+    /// publisher and a device that read the same rulebook compute the same digest.
+    /// Slopes are decimals in the rulebook and become Q16 here, rounded to nearest.
+    pub fn from_rulebook(get: impl Fn(&str) -> Option<Setting>) -> Result<Params, Error> {
+        let read = |key: &str| get(key).ok_or(Error::InvalidInput);
+        let whole = |key: &str| read(key)?.whole();
+        let per_role = |kind: &str| -> Result<[Setting; ROLES], Error> {
+            Ok([
+                read(&format!("voucher.{kind}.member"))?,
+                read(&format!("voucher.{kind}.admin"))?,
+                read(&format!("voucher.{kind}.root"))?,
+            ])
+        };
+        let (slope, min, max) = (per_role("slope")?, per_role("min")?, per_role("max")?);
+        let reward_cap = if read("voucher.reward.enabled")?.flag()? {
+            whole("voucher.reward.cap")?
+        } else {
+            0
+        };
+        let params = Params {
+            c0: whole("standing.c0")?,
+            h_a: whole("standing.h_a")?,
+            h_g: whole("standing.h_g")?,
+            n_half: whole("standing.n_half")?,
+            n_c: whole("standing.n_c")?,
+            e_q: whole("standing.e_q")?,
+            r_max: whole("standing.r_max")?,
+            r_age: whole("standing.r_age")?,
+            c_max_q: whole("standing.c_max_q")?,
+            c_vet: whole("standing.c_vet")?,
+            age_vet: whole("standing.age_vet")?,
+            boost_q: whole("standing.boost_q")?,
+            boost_days: whole("standing.boost_days")?,
+            slope_q: whole("standing.slope_q")?,
+            mid_q: whole("standing.mid_q")?,
+            kappa_q: whole("standing.kappa_q")?,
+            loan_use_q: whole("standing.loan_use_q")?,
+            voucher: VoucherParams {
+                slope_q: [slope[0].q16()?, slope[1].q16()?, slope[2].q16()?],
+                min: [min[0].whole()?, min[1].whole()?, min[2].whole()?],
+                max: [max[0].whole()?, max[1].whole()?, max[2].whole()?],
+                days: whole("voucher.success.min_days")?,
+                k: whole("voucher.success.min_conversations")?,
+                max_punished: whole("voucher.success.max_punishments")?,
+                brake_cap: whole("voucher.brake_cap")?,
+                reward_cap,
+            },
+        };
+        params.validate()?;
+        Ok(params)
+    }
+
+    /// The digest of these parameters and their derived tables under the account-state
+    /// domain: the value a rulebook-derived extension policy carries and the circuits bind.
+    pub fn policy_digest(&self) -> Result<[u8; 32], Error> {
+        let tag = b"cfrm.account-state.v2";
+        let mut domain = [0u8; 32];
+        domain[32 - tag.len()..].copy_from_slice(tag);
+        Policy::derive(*self)?.digest(&domain)
+    }
+
     /// Safe ranges every community setting must stay inside.
     pub fn validate(&self) -> Result<(), Error> {
         let ok = |v: u64, lo: u64, hi: u64| (lo..=hi).contains(&v);
