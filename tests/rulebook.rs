@@ -99,3 +99,16 @@ fn the_policy_digest_is_the_one_the_circuit_pins() {
         "13869f92e82373e15e5b9bbaf09bb0d2f4a71e7af912d20c68ae8ceb98710231"
     );
 }
+
+#[test]
+fn the_activation_owner_binds_the_address_and_the_one_time_token_message() {
+    let owner = czkp::activation_owner("gardenclub", &[1; 32]);
+    assert_eq!(owner, czkp::activation_owner("gardenclub", &[1; 32]));
+    assert_ne!(owner, czkp::activation_owner("gardenclub", &[2; 32]));
+    assert_ne!(owner, czkp::activation_owner("gardenclu", &[1; 32]));
+    // Length-prefixed: shifting bytes between the two inputs changes the result.
+    assert_ne!(
+        czkp::activation_owner("ab", b"c"),
+        czkp::activation_owner("a", b"bc")
+    );
+}
