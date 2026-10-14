@@ -155,7 +155,7 @@ impl Leaf {
         }
         crate::field(&self.state, true)?;
         use crate::poseidon::{hash, integer, limbs};
-        let mut inputs = vec![epoch_domain(), integer(2)];
+        let mut inputs = vec![epoch_domain(), integer(LEAF_TAG)];
         inputs.extend(limbs(community));
         inputs.push(integer(epoch));
         inputs.extend(limbs(&self.owner));
@@ -167,6 +167,9 @@ impl Leaf {
         hash(&inputs)
     }
 }
+
+/// Hash tag of an epoch leaf; interior nodes keep tag 2, so the two never share a transcript shape.
+pub const LEAF_TAG: u64 = 3;
 
 fn epoch_domain() -> [u8; 32] {
     let mut domain = [0; 32];

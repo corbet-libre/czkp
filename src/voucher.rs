@@ -27,6 +27,10 @@ const TAG_BOND_COMMIT: u64 = 61;
 const TAG_BOND_KEY: u64 = 62;
 const TAG_MEMBER: u64 = 63;
 const TAG_ENTRY: u64 = 64;
+const TAG_ISSUE_NULLIFIER: u64 = 65;
+
+/// Most allowance units one issue presentation can claim (its fixed nullifier output).
+pub const ISSUE_UNITS: u64 = 16;
 
 /// The voucher part of the committed account state.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -135,6 +139,24 @@ pub fn member_tag(
 ) -> Result<[u8; 32], Error> {
     let (c, m) = (limbs(community), limbs(member));
     domain_hash(domain, TAG_MEMBER, &[c[0], c[1], m[0], m[1]])
+}
+
+/// Per-unit issue nullifier: a PRF of the member's owner secret over community, epoch and
+/// allowance unit index. Unlinkable to the member and to other epochs; a repeat inside an
+/// epoch is a reuse of that unit of the allowance.
+pub fn issue_nullifier(
+    domain: &[u8; 32],
+    owner_secret: &[u8; 32],
+    community: &[u8; 32],
+    epoch: u64,
+    unit: u64,
+) -> Result<[u8; 32], Error> {
+    let (s, c) = (limbs(owner_secret), limbs(community));
+    domain_hash(
+        domain,
+        TAG_ISSUE_NULLIFIER,
+        &[s[0], s[1], c[0], c[1], integer(epoch), integer(unit)],
+    )
 }
 
 /// What the sponsor remembers about one bond.

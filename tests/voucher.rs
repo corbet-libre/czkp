@@ -260,6 +260,7 @@ fn golden_vectors_are_current() {
                         "key": hex(&voucher::bond_key(&d, &bond).unwrap()),
                         "entry": hex(&entry.digest(&d).unwrap()),
                         "member_tag": hex(&voucher::member_tag(&d, &[1; 32], &[2; 32]).unwrap()),
+                        "nullifier": hex(&voucher::issue_nullifier(&d, &bond, &[1; 32], n + 1, u64::from(kind)).unwrap()),
                     }
                 }));
             }
