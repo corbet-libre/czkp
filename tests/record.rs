@@ -91,6 +91,36 @@ fn leaf() -> Leaf {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[cfg_attr(not(target_arch = "wasm32"), test)]
+fn leaves_hash_with_tag_three_and_never_share_a_transcript_with_nodes() {
+    use czkp::poseidon::{hash, integer, limbs};
+    assert_eq!(czkp::record::LEAF_TAG, 3);
+    let value = leaf();
+    let community = [1; 32];
+    // The same transcript with the interior-node tag must not collide with the leaf.
+    let mut inputs = vec![hash_domain(), integer(2)];
+    inputs.extend(limbs(&community));
+    inputs.push(integer(2));
+    inputs.extend(limbs(&value.owner));
+    inputs.push(integer(value.version));
+    inputs.push(value.state);
+    inputs.extend(limbs(&value.required_inbox));
+    inputs.push(integer(u64::from(value.role)));
+    inputs.extend(limbs(&value.blinding));
+    assert_ne!(
+        hash(&inputs).unwrap(),
+        value.commitment(&community, 2).unwrap()
+    );
+}
+
+fn hash_domain() -> [u8; 32] {
+    let mut domain = [0; 32];
+    let text = b"cblc.record-epoch.v2";
+    domain[32 - text.len()..].copy_from_slice(text);
+    domain
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
 fn fixed_leaf_transcript_and_epoch_blinding() {
     // Library-level domain/injectivity refusals only. Actual frozen issuer and
     // Noir/BB proof interoperability require their separate qualification.

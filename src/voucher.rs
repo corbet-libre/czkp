@@ -39,6 +39,10 @@ pub struct Account {
     pub proven: u64,
     /// Vouchers spent on admissions whose vouchee has not yet proven success.
     pub away: u64,
+    /// Vouchers reserved by links that are still open (made at link creation by an issue
+    /// presentation, released by expiry, revocation or decline, moved to `away` by an
+    /// actual admission).
+    pub reserved: u64,
     /// Vouchers lost for good (overshoot of concurrent admissions).
     pub lost: u64,
     /// Permanent reward bonus.
@@ -70,9 +74,11 @@ pub fn limit(p: &Policy, role: u8, account: &Account, cap: u64) -> Result<u64, E
     Ok((clamped + account.bonus).saturating_sub(account.lost))
 }
 
-/// Vouchers still available to hand out.
+/// Vouchers still available to hand out: the limit less admitted and reserved ones.
 pub fn remaining(p: &Policy, role: u8, account: &Account, cap: u64) -> Result<u64, Error> {
-    Ok(limit(p, role, account, cap)?.saturating_sub(account.away))
+    Ok(limit(p, role, account, cap)?
+        .saturating_sub(account.away)
+        .saturating_sub(account.reserved))
 }
 
 /// A pool cap at or below the brake value counts as braked.
@@ -196,6 +202,8 @@ impl Account {
     pub fn admit(&mut self, p: &Policy, role: u8, cap: u64) -> Result<Entry, Error> {
         let limit = limit(p, role, self, cap)?;
         let overshoot = limit.saturating_sub(self.away) == 0;
+        // An admission consumes one reserved unit of an open link when there is one.
+        self.reserved = self.reserved.saturating_sub(1);
         if overshoot {
             self.lost += 1;
         } else {
@@ -208,6 +216,25 @@ impl Account {
             punished_seen: 0,
             rewards_seen: 0,
         })
+    }
+
+    /// A link of `units` uses is created: the issue presentation reserves them. Refused above
+    /// the remaining allowance.
+    pub fn reserve(&mut self, p: &Policy, role: u8, cap: u64, units: u64) -> Result<(), Error> {
+        if units == 0 || units > remaining(p, role, self, cap)? {
+            return Err(Error::InvalidInput);
+        }
+        self.reserved += units;
+        Ok(())
+    }
+
+    /// Unused uses of a link expired, were revoked or declined: the units return.
+    pub fn release(&mut self, units: u64) -> Result<(), Error> {
+        if units == 0 || units > self.reserved {
+            return Err(Error::InvalidInput);
+        }
+        self.reserved -= units;
+        Ok(())
     }
 
     /// The vouchee proved success: the voucher returns unless it was lost.

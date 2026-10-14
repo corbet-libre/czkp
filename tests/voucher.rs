@@ -80,6 +80,29 @@ fn admission_spends_one_voucher_and_overshoot_is_lost_for_good() {
 }
 
 #[test]
+fn reservations_outlive_epochs_and_move_to_away_on_admission() {
+    let p = policy();
+    let mut a = Account {
+        proven: 1,
+        ..Account::default()
+    };
+    // Limit 3 at cap 40: a 3-use link reserves all of it; a second link has nothing left.
+    a.reserve(&p, MEMBER, 40, 3).unwrap();
+    assert_eq!(voucher::remaining(&p, MEMBER, &a, 40).unwrap(), 0);
+    assert!(a.reserve(&p, MEMBER, 40, 1).is_err());
+    assert!(a.reserve(&p, MEMBER, 40, 0).is_err());
+    // An actual admission moves one unit from reserved to away.
+    a.admit(&p, MEMBER, 40).unwrap();
+    assert_eq!((a.reserved, a.away), (2, 1));
+    assert_eq!(voucher::remaining(&p, MEMBER, &a, 40).unwrap(), 0);
+    // Expiry, revocation or decline of the rest releases it.
+    assert!(a.release(3).is_err());
+    a.release(2).unwrap();
+    assert_eq!(voucher::remaining(&p, MEMBER, &a, 40).unwrap(), 2);
+    assert!(a.release(1).is_err());
+}
+
+#[test]
 fn success_returns_the_voucher_once() {
     let p = policy();
     let mut a = Account {
@@ -222,18 +245,19 @@ fn golden_vectors_are_current() {
     let mut i = 0usize;
     for role in [MEMBER, ADMIN, ROOT] {
         for cap in [1u64, 3, 8, 24, 41, 80, 400] {
-            for (proven, away, lost, bonus) in [
-                (0u64, 0u64, 0u64, 0u64),
-                (5, 0, 0, 0),
-                (5, 2, 0, 1),
-                (5, 3, 1, 2),
-                (5, 60, 0, 0),
+            for (proven, away, lost, bonus, reserved) in [
+                (0u64, 0u64, 0u64, 0u64, 0u64),
+                (5, 0, 0, 0, 2),
+                (5, 2, 0, 1, 1),
+                (5, 3, 1, 2, 0),
+                (5, 60, 0, 0, 3),
             ] {
                 let a = Account {
                     proven,
                     away,
                     lost,
                     bonus,
+                    reserved,
                     ..Account::default()
                 };
                 let bond = bonds[i % 2];
@@ -245,7 +269,7 @@ fn golden_vectors_are_current() {
                 let entry = spent.admit(&p, role, cap).unwrap();
                 cases.push(serde_json::json!({
                     "role": role, "cap": cap,
-                    "account": {"proven": proven, "away": away, "lost": lost, "bonus": bonus},
+                    "account": {"proven": proven, "away": away, "lost": lost, "bonus": bonus, "reserved": reserved},
                     "bond": hex(&bond), "kind": kind, "n": n, "weight_limit": weight_limit,
                     "community": hex(&[1; 32]), "member": hex(&[2; 32]),
                     "expect": {
@@ -253,7 +277,7 @@ fn golden_vectors_are_current() {
                         "remaining": voucher::remaining(&p, role, &a, cap).unwrap(),
                         "weight": voucher::punish_weight(weight_limit),
                         "rewarded": voucher::rewarded(&p, bonus),
-                        "away": spent.away, "lost": spent.lost,
+                        "away": spent.away, "lost": spent.lost, "reserved": spent.reserved,
                         "entry_limit": entry.limit, "overshoot": u64::from(entry.overshoot),
                         "tag": hex(&voucher::obligation_tag(&d, &bond, kind, n).unwrap()),
                         "commit": hex(&voucher::bond_commit(&d, &bond).unwrap()),
