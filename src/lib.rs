@@ -24,6 +24,8 @@ pub mod account;
 
 /// Canonical accepted-state and epoch-ancestry certificate transcripts and verification.
 pub mod certificate;
+/// The certificate issuer key ring with validity periods.
+pub mod issuer_keys;
 
 /// Original compact signing transcripts using maintained Poseidon2, not proof authority.
 pub mod compact;

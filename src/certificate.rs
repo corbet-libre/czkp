@@ -1,13 +1,14 @@
 //! Canonical accepted-state and epoch-ancestry certificate transcripts and their
 //! verification. czkp is the single owner of these signed formats: the issuer signs
 //! the bytes encoded here and every verifier or holder checks through this module.
-//! The accepted-state layout is also consumed by the Noir deposit relation and must
-//! not change. Signing is done by the issuer; only verification lives here.
+//! The accepted-state layout is also consumed by the Noir deposit relation (v2 binds the
+//! community identity besides the address hash). Signing is done by the issuer; only
+//! verification lives here. Which key verifies is decided by [`crate::issuer_keys`].
 use crate::Error;
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 
 const MAX_INTEGER: u64 = (1 << 53) - 1;
-const STATE_DOMAIN: &[u8] = b"cssr.accepted-state.v1\0";
+const STATE_DOMAIN: &[u8] = b"cssr.accepted-state.v2\0";
 const ANCESTRY_DOMAIN: &[u8] = b"cblc.epoch-ancestry.v1\0";
 
 /// Domain-separated certificate body. No opening or counterpart enters the issuer.
@@ -15,6 +16,10 @@ const ANCESTRY_DOMAIN: &[u8] = b"cblc.epoch-ancestry.v1\0";
 pub struct AcceptedState {
     /// Community hash.
     pub community: [u8; 32],
+    /// The community's identity (founding fingerprint), never its address: a reused
+    /// address under the same platform issuer key can never accept another
+    /// incarnation's certificates.
+    pub identity: [u8; 32],
     /// Community-scoped opaque account owner.
     pub owner: [u8; 32],
     /// Accepted state commitment.
@@ -31,7 +36,13 @@ impl AcceptedState {
     /// Fixed encoding also checked inside the Noir deposit relation.
     pub fn bytes(&self) -> Vec<u8> {
         let mut bytes = STATE_DOMAIN.to_vec();
-        for field in [self.community, self.owner, self.state, self.scope] {
+        for field in [
+            self.community,
+            self.identity,
+            self.owner,
+            self.state,
+            self.scope,
+        ] {
             bytes.extend_from_slice(&field);
         }
         bytes.extend_from_slice(&self.version.to_be_bytes());

@@ -29,6 +29,7 @@ fn public(secret: u8) -> [u8; 64] {
 fn state() -> AcceptedState {
     AcceptedState {
         community: [1; 32],
+        identity: [5; 32],
         owner: [2; 32],
         state: [3; 32],
         scope: [4; 32],
@@ -40,9 +41,9 @@ fn state() -> AcceptedState {
 // cssr's tests sign exactly this transcript with issuer key [3; 32] and pin
 // this public key and signature. Verifying them here, with this encoder,
 // detects any divergence between the signer's input and the verifier.
-const GOLDEN_TRANSCRIPT: &str = "637373722e61636365707465642d73746174652e763100010101010101010101010101010101010101010101010101010101010101010102020202020202020202020202020202020202020202020202020202020202020303030303030303030303030303030303030303030303030303030303030303040404040404040404040404040404040404040404040404040404040404040400000000000000070000000000000078";
+const GOLDEN_TRANSCRIPT: &str = "637373722e61636365707465642d73746174652e7632000101010101010101010101010101010101010101010101010101010101010101050505050505050505050505050505050505050505050505050505050505050502020202020202020202020202020202020202020202020202020202020202020303030303030303030303030303030303030303030303030303030303030303040404040404040404040404040404040404040404040404040404040404040400000000000000070000000000000078";
 const GOLDEN_PUBLIC_KEY: &str = "591ab771ebbcfd6d9cb9094d106528add1a69d44c2c1f627f089ec58b9c61adf9f4e6abf0d045c0c693a3c68ad7c97ca72be64def4a26fecd263dd98a92780f0";
-const GOLDEN_SIGNATURE: &str = "902f3030e007662ec00bdb101b6d1205c1d4c461816911db73e1b5d5235e1ed50f5f13410b15d71e59e5eafd6530be144df21ac9729aadbd05625edb52a826bc";
+const GOLDEN_SIGNATURE: &str = "5d7dce889d4477d54367b52f8182d46fe42e32b0ade5ff27213dc2d4df38921323c1d7e787bbf99db619b8bd4f716d2fe6715d4c934466931d9eac98f96519a3";
 
 #[test]
 fn the_signer_golden_vector_verifies_with_this_encoder() {
@@ -58,10 +59,11 @@ fn the_signer_golden_vector_verifies_with_this_encoder() {
 fn accepted_state_binds_every_field_and_the_key() {
     let signature = sign(3, &state().bytes());
     let key = public(3);
-    for field in 0..6 {
+    for field in 0..7 {
         let mut changed = state();
         match field {
             0 => changed.community[0] ^= 1,
+            6 => changed.identity[0] ^= 1,
             1 => changed.owner[0] ^= 1,
             2 => changed.state[0] ^= 1,
             3 => changed.scope[0] ^= 1,
@@ -133,6 +135,7 @@ fn ancestry_transcript_vector_and_every_field_are_bound() {
     // A state certificate signature is never ancestry evidence.
     let accepted = AcceptedState {
         community: body.community,
+        identity: body.community,
         owner: body.owner,
         state: body.state,
         scope: body.circuit_digest,
