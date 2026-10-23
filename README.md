@@ -4,7 +4,7 @@ Canonical BN254 field and base64url encodings, SHA-256 through RustCrypto, and s
 
 Survey (2026-09-30): [RustCrypto sha2](https://crates.io/crates/sha2) and [ed25519-dalek](https://github.com/dalek-cryptography/curve25519-dalek) match the existing wire format and remain dependencies. [Noir](https://github.com/noir-lang/noir) and [Barretenberg](https://github.com/AztecProtocol/aztec-packages/tree/next/barretenberg) remain the proof system; the process verifier is in cvfy and policy circuits in cblc. Bulletproofs was considered but would replace the existing relation and protocol without migration evidence.
 
-CI runs stable Rust formatting, clippy with warnings denied, and tests against the retained dependency graph. No workstation builds. See [CONTRACT](docs/CONTRACT.md).
+CI runs stable Rust formatting, clippy with warnings denied, and tests against the retained dependency graph. See [CONTRACT](docs/CONTRACT.md).
 
 Copyright 2026 Julian Y. Richard Corbet. LGPL-3.0-only WITH LGPL-3.0-linking-exception; see [LICENSE.md](LICENSE.md).
 
