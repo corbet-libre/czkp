@@ -13,5 +13,5 @@ Write all code comments and documentation in English.
 ## Quality boundary
 
 - `cargo fmt --check`, `cargo clippy --all-targets` (no warnings),
-  `cargo test` — all green before every commit. No local workstation
+  `cargo test` — all green before every commit. No local
   builds; use Crow with the canonical Forgejo repository.
