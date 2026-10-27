@@ -112,3 +112,19 @@ fn the_activation_owner_binds_the_address_and_the_one_time_token_message() {
         czkp::activation_owner("a", b"bc")
     );
 }
+/// Negative and NaN decimals are refused as Q16 slopes: without the range guard
+/// the saturating float cast would admit them as a zero slope.
+#[test]
+fn negative_or_nan_decimals_are_not_q16_slopes() {
+    let slope = |value: f64| {
+        Params::from_rulebook(|key| {
+            if key == "voucher.slope.admin" {
+                Some(Setting::Number(value))
+            } else {
+                catalogue(key)
+            }
+        })
+    };
+    assert!(slope(-1.0).is_err());
+    assert!(slope(f64::NAN).is_err());
+}

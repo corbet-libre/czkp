@@ -146,3 +146,51 @@ fn the_ring_travels_as_camel_case_json() {
     let back: Vec<CertificateKeyPeriod> = serde_json::from_str(&text).unwrap();
     assert_eq!(back, ring);
 }
+#[test]
+fn the_exclusive_end_of_a_period_holds_no_key() {
+    let ring = advance(&[], &public(3), 100).unwrap().unwrap();
+    assert_eq!(key_at(&ring, 100).unwrap(), public(3));
+    // The open period ends at the largest circuit integer, exclusively.
+    assert_eq!(key_at(&ring, (1 << 53) - 1), Err(Error::PolicyMismatch));
+}
+
+#[test]
+fn an_inverted_period_is_refused() {
+    let ring = vec![CertificateKeyPeriod {
+        public_key: public(3).to_vec(),
+        valid_from: 500,
+        valid_until: Some(100),
+    }];
+    assert_eq!(validate(&ring), Err(Error::InvalidInput));
+}
+
+use crate::certificate::EpochAncestry;
+
+fn ancestry_fixture(issued_at: u64) -> EpochAncestry {
+    EpochAncestry {
+        community: [1; 32],
+        owner: [2; 32],
+        epoch: 3,
+        root: [4; 32],
+        frozen_leaf: [5; 32],
+        state: [6; 32],
+        version: 7,
+        circuit_digest: [8; 32],
+        verifying_key_digest: [9; 32],
+        issued_at,
+    }
+}
+
+#[test]
+fn ancestry_verifies_only_with_the_key_of_its_own_issuance_time() {
+    let ring = advance(&[], &public(3), 100).unwrap().unwrap();
+    let body = ancestry_fixture(200);
+    let signature = sign(3, &body.bytes().unwrap());
+    verify_ancestry(&ring, &body, &signature).unwrap();
+    // The wrong key's signature over the same bytes is refused.
+    let forged = sign(4, &body.bytes().unwrap());
+    assert_eq!(
+        verify_ancestry(&ring, &body, &forged),
+        Err(Error::Signature)
+    );
+}

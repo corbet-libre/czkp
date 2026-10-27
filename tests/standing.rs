@@ -182,3 +182,118 @@ fn default_digest_equals_the_noir_digest() {
     let got: String = digest.iter().map(|b| format!("{b:02x}")).collect();
     assert_eq!(got, expected);
 }
+/// Boundary products, not sums: the validate() ranges are exact multiples of Q.
+/// Each assertion below fails if one bound is a sum instead of a product, a
+/// quotient instead of a remainder, or a multiple instead of a divisor.
+#[test]
+fn validate_bounds_are_exact_products_of_q() {
+    // boost_q range 0..=2*Q: 100_000 is inside the product, outside the sum 2+Q.
+    assert!(
+        Policy::derive(Params {
+            boost_q: 100_000,
+            ..common::reference()
+        })
+        .is_ok()
+    );
+    // mid_q range Q/4..=3*Q: 100_000 is inside the product, outside the sum 3+Q.
+    assert!(
+        Policy::derive(Params {
+            mid_q: 100_000,
+            ..common::reference()
+        })
+        .is_ok()
+    );
+    // kappa_q range Q/2..=6*Q: 0 is below the quotient but inside the remainder Q%2.
+    assert!(
+        Policy::derive(Params {
+            kappa_q: 0,
+            ..common::reference()
+        })
+        .is_err()
+    );
+    // The quotient boundary itself is accepted.
+    assert!(
+        Policy::derive(Params {
+            kappa_q: Q / 2,
+            ..common::reference()
+        })
+        .is_ok()
+    );
+}
+
+/// The boost window is half-open: answering on the exact last day gets no boost.
+#[test]
+fn answer_boost_ends_on_the_exact_last_day() {
+    let p = Policy::derive(common::reference()).unwrap();
+    let mut st = State::new(0, 0);
+    st.advance(p.params.boost_days, &p);
+    st.answer_received(&p);
+    assert_eq!(st.g, Q);
+}
+
+/// A member admitted after day zero still earns the boost inside the window:
+/// the window measures days since joining, not the calendar day.
+#[test]
+fn answer_boost_counts_days_since_joining() {
+    let p = Policy::derive(common::reference()).unwrap();
+    let mut st = State::new(10, 0);
+    st.advance(25, &p);
+    st.answer_received(&p);
+    assert_eq!(st.g, Q + p.params.boost_q);
+}
+
+/// The veteran offset divides the clean record by the full-veteran record:
+/// a product would cap every member at the maximum after one clean record.
+#[test]
+fn veteran_divides_the_clean_record() {
+    let p = Policy::derive(common::reference()).unwrap();
+    // c/c_vet binds first (2184): the product c*c_vet would cap f at Q instead,
+    // granting the full veteran offset and hiding 49_000 of excess punishment.
+    let st = State {
+        g: 0,
+        a: 0,
+        c: Q,
+        pr: 49_000,
+        pg: 0,
+        lc: 0,
+        day: 60,
+        joined: 0,
+    };
+    assert!(st.trust(&p) < Q);
+}
+
+/// The veteran offset measures membership age, not the calendar day:
+/// adding the admission day would grant a newcomer the full offset.
+#[test]
+fn veteran_counts_days_since_joining() {
+    let p = Policy::derive(common::reference()).unwrap();
+    let st = State {
+        g: 0,
+        a: 0,
+        c: 60 * Q,
+        pr: 49_000,
+        pg: 0,
+        lc: 0,
+        day: 31,
+        joined: 30,
+    };
+    assert!(st.trust(&p) < Q);
+}
+
+/// The reach ceiling grows with days since joining: a newcomer admitted late
+/// does not inherit the calendar day as free seniority.
+#[test]
+fn reach_ceiling_counts_days_since_joining() {
+    let p = Policy::derive(common::reference()).unwrap();
+    let st = State {
+        g: 100 * Q,
+        a: 0,
+        c: 0,
+        pr: 0,
+        pg: 0,
+        lc: 0,
+        day: 10,
+        joined: 10,
+    };
+    assert_eq!(st.reach(&p), 2 << 16);
+}

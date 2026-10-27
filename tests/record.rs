@@ -655,6 +655,14 @@ fn wire_bounds_match_the_declared_capacity_arithmetic() {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[cfg_attr(not(target_arch = "wasm32"), test)]
+fn presentation_key_is_the_public_key_itself() {
+    use czkp::record::presentation_key;
+    assert_eq!(presentation_key(&[7; 32]), [7; 32]);
+    assert_ne!(presentation_key(&[7; 32]), [1; 32]);
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
 fn epoch_boundaries_and_single_refusals() {
     let good = epoch();
     // Limit values that a valid descriptor still accepts.
@@ -690,6 +698,26 @@ fn epoch_boundaries_and_single_refusals() {
     v.starts_at = MAX_INTEGER;
     v.expires_at = MAX_INTEGER + 1;
     assert_eq!(v.validate(&[1; 32], 1), Err(Error::InvalidInput));
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn context_at_the_exact_epoch_end_is_inside() {
+    use czkp::record::{Context, Record, Use};
+    let record = Record {
+        epoch: epoch(),
+        owner: [9; 32],
+        presentation_key: [7; 32],
+        blinded_leaf: [1; 32],
+        certificate: vec![0; 64],
+        shares: None,
+    };
+    let context = Context {
+        purpose: Use::ForumListing,
+        challenge: [8; 32],
+        expires_at: epoch().expires_at,
+    };
+    assert!(record.presentation_bytes(&context).is_ok());
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
@@ -739,4 +767,14 @@ fn leaf_commitment_uses_the_record_epoch_domain() {
     inputs.extend(limbs(&value.blinding));
     let expected = hash(&inputs).unwrap();
     assert_eq!(value.commitment(&community, 2).unwrap(), expected);
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn binding_for_another_owner_is_refused() {
+    let good = presentation(None);
+    assert!(
+        good.check_binding(&good.context, &epoch(), &[10; 32], 172900)
+            .is_err()
+    );
 }

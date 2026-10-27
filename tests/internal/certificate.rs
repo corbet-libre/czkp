@@ -176,3 +176,11 @@ fn malformed_ancestry_bounds_cannot_be_encoded() {
     let signature = sign(3, &boundary.bytes().unwrap());
     boundary.verify(&public(3), &signature).unwrap();
 }
+#[test]
+fn the_largest_circuit_integer_version_encodes() {
+    let mut body = ancestry();
+    body.version = (1 << 53) - 1;
+    let bytes = body.bytes().unwrap();
+    let signature = sign(3, &bytes);
+    body.verify(&public(3), &signature).unwrap();
+}

@@ -300,3 +300,32 @@ fn golden_vectors_are_current() {
     }
     assert_eq!(std::fs::read_to_string(path).unwrap(), text);
 }
+/// The pool cap mirrors the standing cap: never zero, never a constant.
+#[test]
+fn pool_cap_mirrors_the_standing_cap() {
+    let p = policy();
+    let st = State::new(0, 2 * Q);
+    assert_eq!(st.cap(&p), 3);
+    assert_eq!(voucher::cap(&st, &p), st.cap(&p));
+}
+
+/// Consuming a reward records it and grows the bonus, bounded by the policy cap.
+#[test]
+fn consume_reward_records_and_grows_the_capped_bonus() {
+    let p = policy();
+    let mut a = Account::default();
+    let mut entry = voucher::Entry {
+        limit: 3,
+        done: false,
+        overshoot: false,
+        punished_seen: 0,
+        rewards_seen: 0,
+    };
+    a.consume_reward(&p, &mut entry);
+    assert_eq!((entry.rewards_seen, a.bonus), (1, 1));
+    a.consume_reward(&p, &mut entry);
+    assert_eq!((entry.rewards_seen, a.bonus), (2, 2));
+    // The policy cap holds: the count grows on, the bonus does not.
+    a.consume_reward(&p, &mut entry);
+    assert_eq!((entry.rewards_seen, a.bonus), (3, 2));
+}
