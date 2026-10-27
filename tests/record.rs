@@ -626,3 +626,117 @@ fn record_validation_and_context_bounds_refuse_every_malformed_field() {
         assert_eq!(valid().presentation_bytes(&bad), Err(Error::InvalidInput));
     }
 }
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn wire_bounds_match_the_declared_capacity_arithmetic() {
+    assert_eq!(czkp::record::MAX_DOWNLOAD_BYTES, 64 * 1024 * 1024);
+    assert_eq!(czkp::record::MAX_DOWNLOAD_BYTES, 67108864u64);
+    assert_eq!(czkp::record::MAX_LEAVES, 1 << 20);
+    assert_eq!(czkp::record::MAX_LEAVES, 1048576u32);
+    #[cfg(feature = "native")]
+    {
+        assert_eq!(czkp::native::SRS_G1_BYTES, 4 * 1024 * 1024);
+        assert_eq!(czkp::native::SRS_G1_BYTES, 4194304);
+        assert_eq!(czkp::native::MAX_KEY_BYTES, 1024 * 1024);
+        assert_eq!(czkp::native::MAX_KEY_BYTES, 1048576);
+        assert_eq!(czkp::native::MAX_PROOF_BYTES, 4 * 1024 * 1024);
+        assert_eq!(czkp::native::MAX_PROOF_BYTES, 4194304);
+        assert_eq!(
+            czkp::native::MAX_REQUEST_BYTES,
+            2 * (czkp::native::SRS_G1_BYTES
+                + czkp::native::MAX_KEY_BYTES
+                + czkp::native::MAX_PROOF_BYTES)
+                + 8 * 1024 * 1024
+        );
+        assert_eq!(czkp::native::MAX_REQUEST_BYTES, 27262976);
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn epoch_boundaries_and_single_refusals() {
+    let good = epoch();
+    // Limit values that a valid descriptor still accepts.
+    let mut v = good.clone();
+    v.policy_epoch = MAX_INTEGER;
+    v.validate(&[1; 32], 86400).unwrap();
+    let mut v = good.clone();
+    v.epoch = MAX_INTEGER - 1;
+    v.starts_at = MAX_INTEGER - 1;
+    v.expires_at = MAX_INTEGER;
+    v.validate(&[1; 32], 1).unwrap();
+    let mut v = good.clone();
+    v.leaf_count = 1 << 20;
+    v.validate(&[1; 32], 86400).unwrap();
+    // Just past the limit refuses.
+    let mut v = good.clone();
+    v.policy_epoch = MAX_INTEGER + 1;
+    assert_eq!(v.validate(&[1; 32], 86400), Err(Error::InvalidInput));
+    // Exactly one refusal at a time: epoch == 0 with matching times.
+    let mut v = good.clone();
+    v.epoch = 0;
+    v.starts_at = 0;
+    v.expires_at = 86400;
+    assert_eq!(v.validate(&[1; 32], 86400), Err(Error::InvalidInput));
+    // Exactly one refusal at a time: period == 0 with matching times.
+    let mut v = good.clone();
+    v.starts_at = 0;
+    v.expires_at = 0;
+    assert_eq!(v.validate(&[1; 32], 0), Err(Error::InvalidInput));
+    // Exactly one refusal at a time: expires past the limit with matching times.
+    let mut v = good.clone();
+    v.epoch = MAX_INTEGER;
+    v.starts_at = MAX_INTEGER;
+    v.expires_at = MAX_INTEGER + 1;
+    assert_eq!(v.validate(&[1; 32], 1), Err(Error::InvalidInput));
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn leaf_and_certificate_limits_accept_the_maximum() {
+    assert!(leaf().commitment(&[1; 32], MAX_INTEGER).is_ok());
+    let mut v = leaf();
+    v.version = MAX_INTEGER;
+    assert!(v.commitment(&[1; 32], 2).is_ok());
+    assert!(czkp::record::certificate_bytes(&[1; 32], MAX_INTEGER, &[1; 32]).is_ok());
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn object_checks_reject_length_and_range_independently() {
+    use sha2::{Digest, Sha256};
+    let bytes = b"abc";
+    let digest: [u8; 32] = Sha256::digest(bytes).into();
+    let mut v = epoch();
+    v.download_bytes = 2;
+    v.download_digest = digest;
+    assert_eq!(v.check_object(bytes), Err(Error::InvalidInput));
+    let empty_digest: [u8; 32] = Sha256::digest(b"").into();
+    let mut v = epoch();
+    v.download_bytes = 0;
+    v.download_digest = empty_digest;
+    assert_eq!(v.check_object(b""), Err(Error::InvalidInput));
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn leaf_commitment_uses_the_record_epoch_domain() {
+    use czkp::poseidon::{hash, integer, limbs};
+    let value = leaf();
+    let community = [1; 32];
+    let mut domain = [0; 32];
+    let text = b"cblc.record-epoch.v2";
+    domain[32 - text.len()..].copy_from_slice(text);
+    let mut inputs = vec![domain, integer(czkp::record::LEAF_TAG)];
+    inputs.extend(limbs(&community));
+    inputs.push(integer(2));
+    inputs.extend(limbs(&value.owner));
+    inputs.push(integer(value.version));
+    inputs.push(value.state);
+    inputs.extend(limbs(&value.required_inbox));
+    inputs.push(integer(u64::from(value.role)));
+    inputs.extend(limbs(&value.blinding));
+    let expected = hash(&inputs).unwrap();
+    assert_eq!(value.commitment(&community, 2).unwrap(), expected);
+}
