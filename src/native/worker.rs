@@ -148,3 +148,209 @@ pub fn run_worker() -> Result<(), Error> {
     serde_json::to_writer(&mut output, &verdict).or(Err(Error::CryptoProvider))?;
     output.write_all(b"\n").or(Err(Error::CryptoProvider))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sha2::{Digest, Sha256};
+
+    const KEY: [u8; 32] = [5; 32];
+
+    fn key_hex() -> String {
+        HEXLOWER.encode(&KEY)
+    }
+
+    fn key_digest() -> [u8; 32] {
+        Sha256::digest(KEY).into()
+    }
+
+    fn valid_proof() -> Proof {
+        Proof {
+            public_inputs: vec![[0; 32]],
+            proof: "00".repeat(32),
+        }
+    }
+
+    fn valid_request() -> Request {
+        Request {
+            scope: ProofScope {
+                circuit_digest: [1; 32],
+                verifying_key_digest: key_digest(),
+            },
+            verification_key: key_hex(),
+            srs_g1: "00".repeat(SRS_G1_BYTES),
+            srs_g2: "00".repeat(128),
+            proofs: vec![valid_proof()],
+        }
+    }
+
+    fn invalid(request: Request) {
+        assert!(matches!(verify(request), Err(Error::InvalidInput)));
+    }
+
+    fn refused_until_crypto(request: Request) {
+        assert!(matches!(verify(request), Err(Error::CryptoProvider)));
+    }
+
+    #[test]
+    fn decode_accepts_exact_boundary_hex() {
+        assert_eq!(decode("00112233", 4), Ok(vec![0x00, 0x11, 0x22, 0x33]));
+    }
+
+    #[test]
+    fn decode_accepts_short_hex() {
+        assert_eq!(decode("00", 1024), Ok(vec![0]));
+    }
+
+    #[test]
+    fn decode_refuses_empty() {
+        assert_eq!(decode("", 1024), Err(Error::InvalidInput));
+    }
+
+    #[test]
+    fn decode_refuses_overlong_valid_hex() {
+        assert_eq!(decode(&"00".repeat(5), 4), Err(Error::InvalidInput));
+    }
+
+    #[test]
+    fn decode_uses_double_maximum_not_sum() {
+        assert_eq!(decode(&"00".repeat(8), 8), Ok(vec![0; 8]));
+    }
+
+    #[test]
+    fn verify_refuses_zero_circuit_digest() {
+        let mut request = valid_request();
+        request.scope.circuit_digest = [0; 32];
+        invalid(request);
+    }
+
+    #[test]
+    fn verify_refuses_empty_proofs() {
+        let mut request = valid_request();
+        request.proofs.clear();
+        invalid(request);
+    }
+
+    #[test]
+    fn verify_refuses_too_many_proofs() {
+        let mut request = valid_request();
+        request.proofs = (0..MAX_PROOFS + 1).map(|_| valid_proof()).collect();
+        invalid(request);
+    }
+
+    #[test]
+    fn verify_accepts_exactly_max_proofs_shape_until_crypto() {
+        let mut request = valid_request();
+        request.proofs = (0..MAX_PROOFS).map(|_| valid_proof()).collect();
+        refused_until_crypto(request);
+    }
+
+    #[test]
+    fn verify_refuses_short_srs_g1() {
+        let mut request = valid_request();
+        request.srs_g1 = "00".to_string();
+        invalid(request);
+    }
+
+    #[test]
+    fn verify_refuses_srs_g1_at_sum_not_product_length() {
+        let mut request = valid_request();
+        request.srs_g1 = "00".repeat(SRS_G1_BYTES / 2 + 1);
+        invalid(request);
+    }
+
+    #[test]
+    fn verify_refuses_srs_g1_at_half_length() {
+        let mut request = valid_request();
+        request.srs_g1 = "00".repeat(SRS_G1_BYTES / 2);
+        invalid(request);
+    }
+
+    #[test]
+    fn verify_refuses_short_srs_g2() {
+        let mut request = valid_request();
+        request.srs_g2 = "00".to_string();
+        invalid(request);
+    }
+
+    #[test]
+    fn verify_refuses_empty_public_inputs() {
+        let mut request = valid_request();
+        request.proofs[0].public_inputs.clear();
+        invalid(request);
+    }
+
+    #[test]
+    fn verify_refuses_too_many_public_inputs() {
+        let mut request = valid_request();
+        request.proofs[0].public_inputs = vec![[0; 32]; MAX_PUBLIC_INPUTS + 1];
+        invalid(request);
+    }
+
+    #[test]
+    fn verify_accepts_exactly_max_public_inputs_shape_until_crypto() {
+        let mut request = valid_request();
+        request.proofs[0].public_inputs = vec![[0; 32]; MAX_PUBLIC_INPUTS];
+        refused_until_crypto(request);
+    }
+
+    #[test]
+    fn verify_refuses_excess_total_public_inputs() {
+        let mut request = valid_request();
+        request.proofs = (0..9)
+            .map(|_| Proof {
+                public_inputs: vec![[0; 32]; 4000],
+                proof: "00".repeat(32),
+            })
+            .collect();
+        invalid(request);
+    }
+
+    #[test]
+    fn verify_accepts_exactly_max_total_public_inputs_shape_until_crypto() {
+        let mut request = valid_request();
+        request.proofs = (0..8)
+            .map(|_| Proof {
+                public_inputs: vec![[0; 32]; 4096],
+                proof: "00".repeat(32),
+            })
+            .collect();
+        refused_until_crypto(request);
+    }
+
+    #[test]
+    fn verify_refuses_excess_total_proof_bytes() {
+        let mut request = valid_request();
+        request.proofs = (0..5)
+            .map(|_| Proof {
+                public_inputs: vec![[0; 32]],
+                proof: "00".repeat(1024 * 1024),
+            })
+            .collect();
+        invalid(request);
+    }
+
+    #[test]
+    fn verify_accepts_exactly_max_total_proof_bytes_shape_until_crypto() {
+        let mut request = valid_request();
+        request.proofs = (0..4)
+            .map(|_| Proof {
+                public_inputs: vec![[0; 32]],
+                proof: "00".repeat(1024 * 1024),
+            })
+            .collect();
+        refused_until_crypto(request);
+    }
+
+    #[test]
+    fn verify_refuses_proof_length_not_multiple_of_32() {
+        let mut request = valid_request();
+        request.proofs[0].proof = "00".repeat(31);
+        invalid(request);
+    }
+
+    #[test]
+    fn verify_accepts_well_shaped_request_until_crypto() {
+        refused_until_crypto(valid_request());
+    }
+}
