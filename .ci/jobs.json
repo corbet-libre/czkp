@@ -1,44 +1,56 @@
 {
   "schema": 1,
   "generator": "ccid render v1",
-  "tool_revision": "e38f347d6941aa105ac4b55a0d4b8fec2ef22433",
-  "manifest_sha256": "5a6d8f6491adf7895e88d1d31e10b858febe3cefcc2e4b835d39348e11574a09",
+  "tool_revision": "bd9aff07073185fb0a3503bab331aedefb6d8fd2",
+  "manifest_sha256": "43c92e239b2a2a329857070213a17bab353fe4050d97141b4236e835adfd3cc6",
   "jobs": {
     "resolve-dependencies": {
       "job": "resolve-dependencies",
-      "scheduler": "crow",
+      "scheduler": "forgejo",
       "checks": [
         "resolve-dependencies"
       ],
-      "workflow": "repository-jobs",
+      "workflow": "resolve-dependencies",
       "command": [
         "bash",
         ".ci/run-cached.sh"
+      ],
+      "runs_on": "heavy",
+      "events": [
+        "manual"
       ]
     },
     "resolve-npm": {
       "job": "resolve-npm",
-      "scheduler": "crow",
+      "scheduler": "forgejo",
       "checks": [
         "resolve-npm"
       ],
-      "workflow": "repository-jobs",
+      "workflow": "resolve-npm",
       "command": [
         "bash",
         ".ci/run-cached.sh"
+      ],
+      "runs_on": "heavy",
+      "events": [
+        "manual"
       ]
     },
     "verify": {
       "job": "verify",
-      "scheduler": "crow",
+      "scheduler": "forgejo",
       "checks": [
         "verify",
         "advisories"
       ],
-      "workflow": "repository-jobs",
+      "workflow": "ci",
       "command": [
         "bash",
         ".ci/run-cached.sh"
+      ],
+      "runs_on": "heavy",
+      "events": [
+        "manual"
       ]
     }
   }
