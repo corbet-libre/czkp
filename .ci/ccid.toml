@@ -51,3 +51,5 @@ checks = ["resolve-npm"]
 workflow = "resolve-npm"
 command = ["bash", ".ci/run-cached.sh"]
 events = ["manual"]
+
+[check_shell]
