@@ -1,5 +1,5 @@
 //! Voucher accounting: limit, success proof, weights and the obligation addresses.
-mod common;
+use crate::common;
 use czkp::standing::{Policy, Q, State};
 use czkp::voucher::{self, ADMIN, Account, MEMBER, PUNISHED, REWARD, ROOT, SUCCESS};
 
@@ -293,7 +293,7 @@ fn golden_vectors_are_current() {
     let text = serde_json::to_string_pretty(&serde_json::json!({ "cases": cases })).unwrap() + "\n";
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/vectors/voucher/golden.json"
+        "/tests/it/vectors/voucher/golden.json"
     );
     if std::env::var_os("UPDATE_VECTORS").is_some() {
         std::fs::write(path, &text).unwrap();

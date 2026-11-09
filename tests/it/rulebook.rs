@@ -1,6 +1,6 @@
 //! `Params::from_rulebook`: the only way parameters come to exist.
-mod common;
-use common::catalogue;
+use crate::common;
+use crate::common::catalogue;
 use czkp::standing::{Params, RULEBOOK_KEYS, Setting};
 
 #[test]
