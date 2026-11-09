@@ -194,3 +194,26 @@ fn ancestry_verifies_only_with_the_key_of_its_own_issuance_time() {
         Err(Error::Signature)
     );
 }
+
+/// Published-key validation pinned before the move to p256 0.14 (RUSTSEC-2026-0387).
+#[test]
+fn published_key_point_validation_is_pinned() {
+    let rfc: [u8; 64] = (0..64)
+        .map(|i| {
+            u8::from_str_radix(
+                &"60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb67903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299"[i * 2..i * 2 + 2],
+                16,
+            )
+            .unwrap()
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
+    assert!(point(&rfc).is_ok());
+    assert!(point(&public(3)).is_ok());
+    let mut off = rfc;
+    off[63] ^= 1;
+    assert!(point(&off).is_err());
+    assert!(point(&[0; 64]).is_err());
+    assert!(point(&[255; 64]).is_err());
+}

@@ -184,3 +184,85 @@ fn the_largest_circuit_integer_version_encodes() {
     let signature = sign(3, &bytes);
     body.verify(&public(3), &signature).unwrap();
 }
+
+/// Verification known answers pinned before the move to p256 0.14 (RUSTSEC-2026-0387):
+/// the same stored signatures must be accepted or refused identically. RFC 6979 A.2.5
+/// key (low-S forms of 'sample' and 'test'), the golden issuer key, and the largest
+/// scalar n-1; values cross-checked against OpenSSL.
+mod vectors {
+    use super::{hex, verify_bytes};
+
+    const RFC_KEY: &str = "60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb67903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299";
+    const MAX_KEY: &str = "6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296b01cbd1c01e58065711814b583f061e9d431cca994cea1313449bf97c840ae0a";
+    const ORDER: &str = "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551";
+    /// (key, message, low-S signature, the same signature's high-S alias)
+    const STORED: [(&str, &[u8], &str, &str); 3] = [
+        (
+            RFC_KEY,
+            b"sample",
+            "efd48b2aacb6a8fd1140dd9cd45e81d69d2c877b56aaf991c34d0ea84eaf37160834e36ad29a83bf2bc9385e491d6099c8fdf9d1ed67aa7ea5f51f93782857a9",
+            "efd48b2aacb6a8fd1140dd9cd45e81d69d2c877b56aaf991c34d0ea84eaf3716f7cb1c942d657c41d436c7a1b6e29f65f3e900dbb9aff4064dc4ab2f843acda8",
+        ),
+        (
+            RFC_KEY,
+            b"test",
+            "f1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367019f4113742a2b14bd25926b49c649155f267e60d3814b4c0cc84250e46f0083",
+            "f1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367fe60beeb8bd5d4ec42da6d94b639b6ea5dc07c4cd3965338e6f1887217f424ce",
+        ),
+        (
+            MAX_KEY,
+            b"sample",
+            "a2e09df104aafc802a50c6684f6db83355a0a2588585a778b311e7e6c7c600ce487c55a869992245fa2f5a4631e74d8a41bf17b70262ece10f04fbf0dd21b09f",
+            "a2e09df104aafc802a50c6684f6db83355a0a2588585a778b311e7e6c7c600ceb783aa569666ddbb05d0a5b9ce18b2757b27e2f6a4b4b1a3e4b4ced21f4174b2",
+        ),
+    ];
+
+    fn array<const N: usize>(value: &str) -> [u8; N] {
+        hex(value).try_into().unwrap()
+    }
+
+    #[test]
+    fn stored_signatures_keep_their_verdicts() {
+        for (key, message, low, high) in STORED {
+            let key = array::<64>(key);
+            assert!(verify_bytes(&key, message, &array(low)).is_ok());
+            // The high-S alias is a second wire encoding and stays refused.
+            assert!(verify_bytes(&key, message, &array(high)).is_err());
+            let mut other = message.to_vec();
+            other[0] ^= 1;
+            assert!(verify_bytes(&key, &other, &array(low)).is_err());
+            let mut flipped = array::<64>(low);
+            flipped[63] ^= 1;
+            assert!(verify_bytes(&key, message, &flipped).is_err());
+        }
+        let golden = (
+            array::<64>(super::GOLDEN_PUBLIC_KEY),
+            hex(super::GOLDEN_TRANSCRIPT),
+            array::<64>(super::GOLDEN_SIGNATURE),
+        );
+        assert!(verify_bytes(&golden.0, &golden.1, &golden.2).is_ok());
+    }
+
+    #[test]
+    fn malformed_keys_and_scalars_are_refused() {
+        let (key, message, low, _) = STORED[0];
+        let key = array::<64>(key);
+        let low = array::<64>(low);
+        // Zero or out-of-range r and s.
+        for (offset, value) in [
+            (0, [0u8; 32]),
+            (32, [0u8; 32]),
+            (0, array(ORDER)),
+            (32, array(ORDER)),
+        ] {
+            let mut signature = low;
+            signature[offset..offset + 32].copy_from_slice(&value);
+            assert!(verify_bytes(&key, message, &signature).is_err());
+        }
+        // A point off the curve, and (0, 0).
+        let mut off = key;
+        off[63] ^= 1;
+        assert!(verify_bytes(&off, message, &low).is_err());
+        assert!(verify_bytes(&[0; 64], message, &low).is_err());
+    }
+}
