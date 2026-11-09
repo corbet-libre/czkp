@@ -8,7 +8,7 @@ fn public(secret: u8) -> [u8; 64] {
     SigningKey::from_slice(&[secret; 32])
         .unwrap()
         .verifying_key()
-        .to_encoded_point(false)
+        .to_sec1_point(false)
         .as_bytes()[1..]
         .try_into()
         .unwrap()
@@ -16,11 +16,7 @@ fn public(secret: u8) -> [u8; 64] {
 
 fn sign(secret: u8, bytes: &[u8]) -> [u8; 64] {
     let signature: Signature = SigningKey::from_slice(&[secret; 32]).unwrap().sign(bytes);
-    signature
-        .normalize_s()
-        .unwrap_or(signature)
-        .to_bytes()
-        .into()
+    signature.normalize_s().to_bytes().into()
 }
 
 fn state(community: u8, accepted_at: u64) -> AcceptedState {

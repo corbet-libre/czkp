@@ -132,7 +132,7 @@ fn verify_bytes(key: &[u8; 64], bytes: &[u8], signature: &[u8; 64]) -> Result<()
     let key = VerifyingKey::from_sec1_bytes(&encoded).map_err(|_| Error::Signature)?;
     let signature = Signature::from_slice(signature).map_err(|_| Error::Signature)?;
     // A high-S alias has a valid mathematical signature but a second wire encoding.
-    if signature.normalize_s().is_some() {
+    if signature.normalize_s() != signature {
         return Err(Error::Signature);
     }
     key.verify(bytes, &signature).map_err(|_| Error::Signature)

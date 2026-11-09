@@ -12,16 +12,12 @@ fn hex(value: &str) -> Vec<u8> {
 fn sign(secret: u8, bytes: &[u8]) -> [u8; 64] {
     let key = SigningKey::from_slice(&[secret; 32]).unwrap();
     let signature: Signature = key.sign(bytes);
-    signature
-        .normalize_s()
-        .unwrap_or(signature)
-        .to_bytes()
-        .into()
+    signature.normalize_s().to_bytes().into()
 }
 
 fn public(secret: u8) -> [u8; 64] {
     let key = SigningKey::from_slice(&[secret; 32]).unwrap();
-    key.verifying_key().to_encoded_point(false).as_bytes()[1..]
+    key.verifying_key().to_sec1_point(false).as_bytes()[1..]
         .try_into()
         .unwrap()
 }
@@ -78,7 +74,7 @@ fn accepted_state_binds_every_field_and_the_key() {
     let canonical = Signature::from_slice(&signature).unwrap();
     let (r, s) = canonical.split_scalars();
     let high = Signature::from_scalars(r.to_bytes(), (-*s).to_bytes()).unwrap();
-    assert!(high.normalize_s().is_some());
+    assert!(high.normalize_s() != high);
     assert!(state().verify(&key, &high.to_bytes().into()).is_err());
 }
 
