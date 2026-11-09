@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "generator": "ccid render v1",
-  "tool_revision": "bd9aff07073185fb0a3503bab331aedefb6d8fd2",
-  "manifest_sha256": "43c92e239b2a2a329857070213a17bab353fe4050d97141b4236e835adfd3cc6",
+  "tool_revision": "",
+  "manifest_sha256": "7bef202cb14bc953bd68055349d5867cbb7f780e4efbb64e7fb2ae95858532f4",
   "jobs": {
     "resolve-dependencies": {
       "job": "resolve-dependencies",
@@ -18,7 +18,8 @@
       "runs_on": "heavy",
       "events": [
         "manual"
-      ]
+      ],
+      "archive_inputs": true
     },
     "resolve-npm": {
       "job": "resolve-npm",
@@ -34,7 +35,8 @@
       "runs_on": "heavy",
       "events": [
         "manual"
-      ]
+      ],
+      "archive_inputs": true
     },
     "verify": {
       "job": "verify",
@@ -51,7 +53,8 @@
       "runs_on": "heavy",
       "events": [
         "manual"
-      ]
+      ],
+      "archive_inputs": true
     }
   }
 }
