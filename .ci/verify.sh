@@ -15,7 +15,6 @@ python3 .github/check-first-party.py
 # check gate (ci.yml check job). The resolve job's npm/cargo update is
 # intentionally not preserved: verify runs against the committed snapshot.
 rustc --version
-bash .ci/update-our-crates.sh
 cargo fmt --check || { cargo fmt; git diff > formatting.patch; exit 1; }
 cargo check --locked --lib --no-default-features
 cargo clippy --locked --all-targets --all-features -- -D warnings
