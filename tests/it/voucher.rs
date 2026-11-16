@@ -97,6 +97,7 @@ fn reservations_outlive_epochs_and_move_to_away_on_admission() {
     assert_eq!(voucher::remaining(&p, MEMBER, &a, 40).unwrap(), 0);
     // Expiry, revocation or decline of the rest releases it.
     assert!(a.release(3).is_err());
+    assert!(a.release(0).is_err());
     a.release(2).unwrap();
     assert_eq!(voucher::remaining(&p, MEMBER, &a, 40).unwrap(), 2);
     assert!(a.release(1).is_err());

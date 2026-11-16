@@ -132,6 +132,19 @@ fn malformed_rings_are_refused() {
     validate(&full).unwrap();
     assert_eq!(advance(&full, &public(4), 10_000), Err(Error::Capacity));
     assert!(advance(&good, &public(3), 0).is_err());
+    // One period more than a ring may publish, a start beyond the circuit integers, and a
+    // rotation time beyond them are refused as input.
+    let over: Vec<_> = (0..=MAX_PERIODS as u64)
+        .map(|i| period(3, 1 + 2 * i, Some(2 + 2 * i)))
+        .collect();
+    assert_eq!(validate(&over), Err(Error::InvalidInput));
+    let mut late = good.clone();
+    late[0].valid_from = max + 1;
+    assert_eq!(validate(&late), Err(Error::InvalidInput));
+    assert_eq!(
+        advance(&good, &public(4), max + 1),
+        Err(Error::InvalidInput)
+    );
 }
 
 #[test]

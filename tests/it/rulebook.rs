@@ -20,6 +20,7 @@ fn the_reference_community_reads_every_key_and_nothing_else() {
     for key in RULEBOOK_KEYS {
         assert!(catalogue(key).is_some(), "{key}");
     }
+    assert_eq!(catalogue("standing.unknown"), None);
 }
 
 #[test]
@@ -62,6 +63,8 @@ fn the_reward_switch_zeroes_the_cap_and_a_wrong_type_or_range_is_refused() {
     assert!(wrong_type("voucher.reward.enabled", Setting::Integer(1)).is_err());
     assert!(wrong_type("standing.c0", Setting::Number(3.5)).is_err());
     assert!(wrong_type("standing.c0", Setting::Number(-1.0)).is_err());
+    // A whole decimal too large to be an exact count.
+    assert!(wrong_type("standing.c0", Setting::Number(1e15)).is_err());
     // Outside the safe ranges.
     assert!(wrong_type("standing.c0", Setting::Integer(17)).is_err());
     assert!(wrong_type("voucher.brake_cap", Setting::Integer(5)).is_err());
